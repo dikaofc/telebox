@@ -81,14 +81,17 @@ describe("postgres query shapes used by app", () => {
     assert.equal(rows.length, 0);
   });
 
-  it("report join with files", async () => {
-    await pglite.query("INSERT INTO reports (file_id, reason, created_at) VALUES ($1, $2, $3)", ["testid1", "spam", Date.now()]);
-    const rows = await q<{ id: number; file_id: string; reason: string; name: string }>(
-      `SELECT r.id, r.file_id, r.reason, f.name
-       FROM reports r LEFT JOIN files f ON f.id = r.file_id
-       WHERE r.reviewed = 0 ORDER BY r.created_at DESC LIMIT 100`,
+  it("dedup is scoped by owner", async () => {
+    const rows = await q<{ id: string }>(
+      "SELECT id FROM files WHERE sha256 = $1 AND user_id = $2 AND deleted_at IS NULL AND (expires_at IS NULL OR expires_at > $3)",
+      ["deadbeef", 999, Date.now()],
     );
-    assert.equal(rows[0].name, "a.txt");
+    assert.equal(rows.length, 0); // different owner -> no match
+    const own = await q<{ id: string }>(
+      "SELECT id FROM files WHERE sha256 = $1 AND user_id = $2 AND deleted_at IS NULL AND (expires_at IS NULL OR expires_at > $3)",
+      ["deadbeef", 0, Date.now()],
+    );
+    assert.equal(own[0].id, "testid1");
   });
 
   it("bigint timestamps come back as numbers", async () => {
