@@ -84,7 +84,6 @@ export default function Home() {
           {" / "}
           {auth?.logged_in ? (
             <>
-              {auth.email}{" "}
               <a href="/my" style={{ color: "#666", textDecoration: "underline" }}>files</a>
               {" / "}
               <a href="/profile" style={{ color: "#666", textDecoration: "underline" }}>profile</a>
