@@ -165,9 +165,11 @@ class SqliteDb implements Db {
 /* ------------------------------- Postgres ------------------------------ */
 
 // BIGINT columns arrive as strings from pg; coerce to numbers so callers
-// get the same shapes as SQLite (Date math, comparisons).
+// get the same shapes as SQLite (Date math, comparisons). NUMERIC (SUM/COUNT
+// can produce it) too.
 pg.types.setTypeParser(pg.types.builtins.INT8, (v: string) => Number(v));
 pg.types.setTypeParser(pg.types.builtins.INT4, (v: string) => Number(v));
+pg.types.setTypeParser(pg.types.builtins.NUMERIC, (v: string) => Number(v));
 
 function toPgPlaceholders(sql: string): string {
   let n = 0;

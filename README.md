@@ -112,3 +112,6 @@ curl -X POST -H 'Content-Type: application/json' -d '{"id":"FILE_ID","reason":"s
 Rate limiter uses Upstash Redis when `UPSTASH_REDIS_REST_*` is set; falls back to in-memory locally.
 
 Postgres path is covered by tests via PGlite (real Postgres in WASM) — run `npm test`.
+
+node -e                                                               │
+ │                          │ "console.log(require('crypto').randomBytes(32).toString('hex'))"
