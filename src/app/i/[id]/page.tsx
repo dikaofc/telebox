@@ -36,14 +36,17 @@ export default async function FilePreview({ params }: { params: Promise<{ id: st
   if (!row || !(await canAccess(id, row.user_id))) notFound();
 
   // Sweep: mark expired files deleted so they drop out of listings and
-  // remove the Telegram blob.
+  // remove the Telegram blob. Server component — runs once per request, so
+  // Date.now() here is a read of the request clock, not a re-render hazard.
+  // eslint-disable-next-line react-hooks/purity -- server component, once per request
+  const now = Date.now();
   const expired = await db.get<{ tg_chat_id: string; tg_message_id: number }>(
     "SELECT tg_chat_id, tg_message_id FROM files WHERE id = ? AND expires_at IS NOT NULL AND expires_at < ?",
     id,
-    Date.now()
+    now
   );
   if (expired) {
-    await db.run("UPDATE files SET deleted_at = ? WHERE id = ?", Date.now(), id);
+    await db.run("UPDATE files SET deleted_at = ? WHERE id = ?", now, id);
     void deleteMessage(expired.tg_chat_id, expired.tg_message_id);
     notFound();
   }

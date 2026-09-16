@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 
 type FileItem = { id: string; name: string; mime: string; size: number; created_at: string; expires_at: string | null; url: string; direct_url: string };
 type KeyItem = { id: number; name: string; created_at: string; last_used_at: string | null };
@@ -64,7 +65,7 @@ export default function MyPage() {
     <main style={{ maxWidth: 640, margin: "6vh auto", padding: 24, fontFamily: "system-ui, sans-serif" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
         <h1 style={{ fontSize: 24, margin: 0 }}>My Account</h1>
-        <a href="/" style={{ fontSize: 13, color: "#666" }}>back to upload</a>
+        <Link href="/" style={{ fontSize: 13, color: "#666" }}>back to upload</Link>
       </div>
 
       <div style={{ display: "flex", gap: 16, marginBottom: 20 }}>

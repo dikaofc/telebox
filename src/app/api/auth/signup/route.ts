@@ -21,6 +21,7 @@ export async function POST(req: NextRequest) {
 
   const email = String(body.email).toLowerCase().trim();
   const password = String(body.password);
+  const name = String(body.name ?? "").trim().slice(0, 60);
 
   if (password.length < 8) {
     return NextResponse.json({ error: "password must be at least 8 characters" }, { status: 400 });
@@ -35,7 +36,7 @@ export async function POST(req: NextRequest) {
   }
 
   const hash = await hashPassword(password);
-  await db.run("INSERT INTO users (email, password_hash, created_at) VALUES (?, ?, ?)", email, hash, Date.now());
+  await db.run("INSERT INTO users (email, password_hash, name, created_at) VALUES (?, ?, ?, ?)", email, hash, name, Date.now());
   const row = await db.get<{ id: number }>("SELECT id FROM users WHERE email = ?", email);
   const userId = row?.id ?? 0;
 

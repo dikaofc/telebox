@@ -52,9 +52,44 @@ const SQLITE_SCHEMA = `
     FOREIGN KEY (user_id) REFERENCES users(id)
   );
 
+  CREATE TABLE IF NOT EXISTS pastes (
+    id          TEXT PRIMARY KEY,
+    title       TEXT NOT NULL,
+    content     TEXT NOT NULL,
+    language    TEXT NOT NULL DEFAULT 'text',
+    user_id     INTEGER NOT NULL DEFAULT 0,
+    author_name TEXT NOT NULL DEFAULT '',
+    created_at  INTEGER NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS paste_likes (
+    paste_id   TEXT NOT NULL,
+    actor      TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (paste_id, actor)
+  );
+
+  CREATE TABLE IF NOT EXISTS paste_stars (
+    paste_id   TEXT NOT NULL,
+    actor      TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (paste_id, actor)
+  );
+
+  CREATE TABLE IF NOT EXISTS paste_comments (
+    id          TEXT PRIMARY KEY,
+    paste_id    TEXT NOT NULL,
+    user_id     INTEGER NOT NULL DEFAULT 0,
+    author_name TEXT NOT NULL DEFAULT '',
+    body        TEXT NOT NULL,
+    created_at  INTEGER NOT NULL
+  );
+
   CREATE INDEX IF NOT EXISTS idx_files_sha256 ON files(sha256);
   CREATE INDEX IF NOT EXISTS idx_files_user ON files(user_id);
   CREATE INDEX IF NOT EXISTS idx_api_keys_hash ON api_keys(key_hash);
+  CREATE INDEX IF NOT EXISTS idx_pastes_created ON pastes(created_at);
+  CREATE INDEX IF NOT EXISTS idx_comments_paste ON paste_comments(paste_id, created_at);
 `;
 
 /**
@@ -94,10 +129,52 @@ const PG_SCHEMA = `
     last_used_at BIGINT
   );
 
+  CREATE TABLE IF NOT EXISTS pastes (
+    id          TEXT PRIMARY KEY,
+    title       TEXT NOT NULL,
+    content     TEXT NOT NULL,
+    language    TEXT NOT NULL DEFAULT 'text',
+    user_id     BIGINT NOT NULL DEFAULT 0,
+    author_name TEXT NOT NULL DEFAULT '',
+    created_at  BIGINT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS paste_likes (
+    paste_id   TEXT NOT NULL,
+    actor      TEXT NOT NULL,
+    created_at BIGINT NOT NULL,
+    PRIMARY KEY (paste_id, actor)
+  );
+
+  CREATE TABLE IF NOT EXISTS paste_stars (
+    paste_id   TEXT NOT NULL,
+    actor      TEXT NOT NULL,
+    created_at BIGINT NOT NULL,
+    PRIMARY KEY (paste_id, actor)
+  );
+
+  CREATE TABLE IF NOT EXISTS paste_comments (
+    id          TEXT PRIMARY KEY,
+    paste_id    TEXT NOT NULL,
+    user_id     BIGINT NOT NULL DEFAULT 0,
+    author_name TEXT NOT NULL DEFAULT '',
+    body        TEXT NOT NULL,
+    created_at  BIGINT NOT NULL
+  );
+
   CREATE INDEX IF NOT EXISTS idx_files_sha256 ON files(sha256);
   CREATE INDEX IF NOT EXISTS idx_files_user ON files(user_id);
   CREATE INDEX IF NOT EXISTS idx_api_keys_hash ON api_keys(key_hash);
+  CREATE INDEX IF NOT EXISTS idx_pastes_created ON pastes(created_at);
+  CREATE INDEX IF NOT EXISTS idx_comments_paste ON paste_comments(paste_id, created_at);
 `;
+
+/** Columns added to existing users tables after the original schema. */
+const USER_COLUMN_MIGRATIONS = [
+  "ALTER TABLE users ADD COLUMN IF NOT EXISTS name TEXT NOT NULL DEFAULT ''",
+  "ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_file_id TEXT",
+  "ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_mime TEXT",
+];
 
 /** Anonymous uploads use user_id=0; PG enforces the FK so the row must exist. */
 const SQLITE_SEED = `INSERT OR IGNORE INTO users (id, email, password_hash, created_at) VALUES (0, 'system', '', 0)`;
@@ -117,12 +194,26 @@ class SqliteDb implements Db {
   // (Vercel's Node may not expose it, and it's not needed in PG mode).
   private conn(): import("node:sqlite").DatabaseSync {
     if (!this.db) {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports -- intentional: node:sqlite must not be a static import so Postgres deployments never load it
       const { DatabaseSync } = require("node:sqlite") as typeof import("node:sqlite");
       this.db = new DatabaseSync(this.path);
       this.db.exec(SQLITE_SCHEMA);
       this.db.exec(SQLITE_SEED);
+      this.runUserMigrations();
     }
     return this.db;
+  }
+
+  // SQLite has no ADD COLUMN IF NOT EXISTS; swallow "duplicate column" errors.
+  private runUserMigrations(): void {
+    for (const sql of USER_COLUMN_MIGRATIONS) {
+      const sqliteSql = sql.replace(/ ADD COLUMN IF NOT EXISTS /g, " ADD COLUMN ");
+      try {
+        this.db!.exec(sqliteSql);
+      } catch (e) {
+        if (!String(e).includes("duplicate column name")) throw e;
+      }
+    }
   }
 
   get<T>(sql: string, ...params: unknown[]): Promise<T | undefined> {
@@ -160,8 +251,12 @@ function toPgPlaceholders(sql: string): string {
   return sql.replace(/\?/g, () => `$${++n}`);
 }
 
-export const __pgInternals = { toPgPlaceholders, PG_SCHEMA, PG_SEED };
-
+export const __pgInternals = {
+  toPgPlaceholders,
+  PG_SCHEMA,
+  PG_SEED,
+  USER_COLUMN_MIGRATIONS,
+};
 
 class PgDb implements Db {
   private pool: pg.Pool;
@@ -179,6 +274,9 @@ class PgDb implements Db {
   private async init(): Promise<void> {
     await this.pool.query(PG_SCHEMA);
     await this.pool.query(PG_SEED);
+    for (const sql of USER_COLUMN_MIGRATIONS) {
+      await this.pool.query(sql);
+    }
   }
 
   private async ensureReady(): Promise<void> {

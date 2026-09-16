@@ -79,11 +79,15 @@ export default function Home() {
     <main style={{ maxWidth: 560, margin: "10vh auto", padding: 24, fontFamily: "system-ui, sans-serif" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <h1 style={{ fontSize: 28, margin: 0 }}>telebox</h1>
-        <div style={{ fontSize: 13, color: "#666" }}>
+        <div style={{ fontSize: 13, color: "#666", display: "flex", gap: 8, alignItems: "center" }}>
+          <a href="/pastebin" style={{ color: "#666", textDecoration: "underline" }}>pastebin</a>
+          {" / "}
           {auth?.logged_in ? (
             <>
               {auth.email}{" "}
               <a href="/my" style={{ color: "#666", textDecoration: "underline" }}>files</a>
+              {" / "}
+              <a href="/profile" style={{ color: "#666", textDecoration: "underline" }}>profile</a>
               {" / "}
               <button onClick={logout} style={{ background: "none", border: "none", color: "#999", cursor: "pointer", textDecoration: "underline" }}>logout</button>
             </>

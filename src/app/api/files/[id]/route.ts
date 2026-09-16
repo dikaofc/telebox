@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import db from "@/lib/db";
 import { rawUrl } from "@/lib/raw-serve";
 import { deleteMessage } from "@/lib/telegram";
-import { resolveUserId, getSessionUserId } from "@/lib/session";
+import { resolveUserId } from "@/lib/session";
 
 export const runtime = "nodejs";
 

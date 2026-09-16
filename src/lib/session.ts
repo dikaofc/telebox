@@ -1,4 +1,4 @@
-import { createHmac, randomBytes, createHash } from "node:crypto";
+import { createHmac, createHash } from "node:crypto";
 import { cookies } from "next/headers";
 import { NextRequest } from "next/server";
 import db from "@/lib/db";
@@ -79,6 +79,39 @@ export async function resolveUserId(req: NextRequest): Promise<number> {
   const fromCookie = await getSessionUserIdFromCookie();
   if (fromCookie) return fromCookie;
   return (await getUserIdFromApiKey(req)) ?? 0;
+}
+
+export type SessionUser = {
+  id: number;
+  email: string;
+  name: string;
+  avatar_file_id: string | null;
+};
+
+/** Current session user record (name/avatar live on users). */
+export async function getSessionUser(): Promise<SessionUser | null> {
+  const userId = await getSessionUserIdFromCookie();
+  if (!userId) return null;
+  const row = await db.get<SessionUser>(
+    "SELECT id, email, name, avatar_file_id FROM users WHERE id = ?",
+    userId
+  );
+  return row ?? null;
+}
+
+/**
+ * Stable identity for likes/stars/comments. Real accounts get `user:<id>`;
+ * anonymous visitors get an IP-derived hash so they can retract their own
+ * vote without being able to spoof another anon's.
+ */
+export async function resolveActor(req: NextRequest): Promise<string> {
+  const fromCookie = await getSessionUserIdFromCookie();
+  if (fromCookie) return `user:${fromCookie}`;
+  const apiKeyUserId = await getUserIdFromApiKey(req);
+  if (apiKeyUserId) return `user:${apiKeyUserId}`;
+  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? req.headers.get("x-real-ip") ?? "unknown";
+  const hash = createHash("sha256").update(`${ip}:${sessionSecret()}`).digest("hex").slice(0, 16);
+  return `ip:${hash}`;
 }
 
 export function setSessionCookie(token: string) {
