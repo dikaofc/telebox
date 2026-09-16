@@ -38,6 +38,7 @@ Layers:
 - `pastes(id, title, content, language, user_id, author_name, created_at)` — public pastebin.
 - `paste_likes(paste_id, actor, created_at)`, `paste_stars(paste_id, actor, created_at)` — PK `(paste_id, actor)`, one reaction per person. `actor` is `user:<id>` for accounts or `ip:<sha256(ip+salt)[:16]>` for anonymous visitors, so anons can retract their own vote without impersonating another.
 - `paste_comments(id, paste_id, user_id, author_name, body, created_at)`.
+- `shares(id, file_id, token UNIQUE, created_at, expires_at)` — capability tokens for private files. Serving via `/s/:token` bypasses the owner gate; the token is the authorization.
 
 ## Key decisions
 
@@ -50,6 +51,7 @@ Layers:
 - Rate limiting: Upstash Redis REST (atomic INCR+EXPIRE pipeline), 3s timeout, fail-open, in-memory fallback for local dev. Applied to upload, signup (5/60s), login (10/60s).
 - Expiration: upload accepts `ttl` (60s–30d, default none) → `expires_at`. Lazy sweep on access marks expired rows `deleted_at` and purges the Telegram message (serverless-compatible; a real janitor replaces it later).
 - Pastebin: public read for everyone; create/comment/like/star are rate-limited per IP. Author name comes from the account profile or "anonymous". Avatar uploads go through the standard file validation (MIME + magic bytes) plus an image-only allowlist, stored in Telegram as a regular blob.
+- Share links: `/s/:token` for private files. A 192-bit random token (`sh_` prefix) is the capability — no lookup by id, no enumeration, no existence leak (missing token/share/file/owner all read 404). Share expiry uses the same TTL clamp as uploads (60s–30d). `files` DELETE and the expiry sweep cascade-delete shares.
 - User columns (`name`, `avatar_file_id`, `avatar_mime`) are added by idempotent migrations on both backends — SQLite tolerates duplicate-column errors, Postgres uses `ADD COLUMN IF NOT EXISTS`.
 - Telegram `getFile` URLs expire and are IP-locked to the bot; never cached client-side beyond the proxied response.
 - In-memory rate limiter fallback keeps dev working with zero setup; swap to Upstash happens automatically when `UPSTASH_REDIS_REST_URL`/`TOKEN` are set.

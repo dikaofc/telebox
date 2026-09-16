@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { SharePanel } from "@/components/share-panel";
 
 type FileItem = { id: string; name: string; mime: string; size: number; created_at: string; expires_at: string | null; url: string; direct_url: string };
 type KeyItem = { id: number; name: string; created_at: string; last_used_at: string | null };
@@ -83,23 +84,28 @@ export default function MyPage() {
         <div>
           {files.length === 0 && <p style={{ color: "#999" }}>No files yet.</p>}
           {files.map((f) => (
-            <div key={f.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: "1px solid #eee" }}>
-              <div style={{ minWidth: 0, flex: 1 }}>
-                <a href={`/i/${f.id}`} style={{ fontSize: 14, wordBreak: "break-all", textDecoration: "none", color: "#111" }}>
-                  {f.name}
-                </a>
-                <div style={{ fontSize: 12, color: "#666", marginTop: 2 }}>
-                  {formatSize(f.size)} &middot; {new Date(f.created_at).toLocaleDateString()}
-                  {f.expires_at && (
-                    <span style={{ color: new Date(f.expires_at) < new Date() ? "#c00" : "#b8860b" }}>
-                      {" "}&middot; expires {new Date(f.expires_at).toLocaleDateString()}
-                    </span>
-                  )}
+            <div key={f.id} style={{ padding: "10px 0", borderBottom: "1px solid #eee" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <a href={`/i/${f.id}`} style={{ fontSize: 14, wordBreak: "break-all", textDecoration: "none", color: "#111" }}>
+                    {f.name}
+                  </a>
+                  <div style={{ fontSize: 12, color: "#666", marginTop: 2 }}>
+                    {formatSize(f.size)} &middot; {new Date(f.created_at).toLocaleDateString()}
+                    {f.expires_at && (
+                      <span style={{ color: new Date(f.expires_at) < new Date() ? "#c00" : "#b8860b" }}>
+                        {" "}&middot; expires {new Date(f.expires_at).toLocaleDateString()}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0, marginLeft: 12 }}>
+                  <button onClick={() => deleteFile(f.id)} style={{ background: "none", border: "none", color: "#c00", cursor: "pointer", fontSize: 13 }}>
+                    delete
+                  </button>
                 </div>
               </div>
-              <button onClick={() => deleteFile(f.id)} style={{ background: "none", border: "none", color: "#c00", cursor: "pointer", fontSize: 13, flexShrink: 0, marginLeft: 12 }}>
-                delete
-              </button>
+              <SharePanel fileId={f.id} fileName={f.name} />
             </div>
           ))}
         </div>

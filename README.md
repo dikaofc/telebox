@@ -40,6 +40,7 @@ Open http://localhost:3000
 - Rate limiting on upload, signup (5/60s), login (10/60s)
 - Public pastebin: create pastes, comment, like, star — anyone can read and copy, reactions are per-person (account or IP-derived for anonymous)
 - Profile page: display name, password change, profile photo (stored in Telegram, served at `/avatar/:id`)
+- Share links for private files: `/s/:token` — revocable, expiring capability tokens (default none, up to 30 days); file delete or expiry kills the shares too
 
 ## API
 
@@ -102,7 +103,19 @@ curl -X POST http://localhost:3000/api/pastes/:id/star
 curl -X POST -H 'Content-Type: application/json' -d '{"body":"nice"}' http://localhost:3000/api/pastes/:id/comments
 ```
 
-### Profile
+### Share a private file
+
+```bash
+# list / create / revoke (owner only)
+curl -b session http://localhost:3000/api/files/:id/shares
+curl -b session -X POST -H 'Content-Type: application/json' -d '{"ttl":86400}' http://localhost:3000/api/files/:id/shares
+curl -b session -X DELETE -H 'Content-Type: application/json' -d '{"id":"share_id"}' http://localhost:3000/api/files/:id/shares
+
+# anyone with the link can fetch bytes (no owner gate)
+curl http://localhost:3000/s/:token
+```
+
+Share tokens are long capabilities (`sh_` + 192-bit). They never weaken the owner gate — `/raw` stays private. Deleting the file or letting it expire revokes all its shares.
 
 ```bash
 curl http://localhost:3000/api/profile            # own profile (session)
@@ -119,6 +132,7 @@ curl -F 'avatar=@photo.png' http://localhost:3000/api/profile/avatar
 | `/i/:id` | File preview (image/video/audio/text) — public for anonymous files, owner-only for account files |
 | `/raw/:id` or `/raw/:id/:filename` | Raw file (download or inline) — same access model |
 | `/my` | My Files + API Keys management |
+| `/s/:token` | Share link for a private file (revocable, expiring) |
 | `/pastebin` | Public paste feed (copy, comment, like, star) |
 | `/paste/new` | Create a paste |
 | `/paste/:id` | Paste detail + comments |

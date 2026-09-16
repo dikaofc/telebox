@@ -17,6 +17,7 @@ async function sweepExpired(id: string): Promise<void> {
   );
   if (row) {
     await db.run("UPDATE files SET deleted_at = ? WHERE id = ?", Date.now(), id);
+    await db.run("DELETE FROM shares WHERE file_id = ?", id);
     void deleteMessage(row.tg_chat_id, row.tg_message_id);
   }
 }

@@ -85,6 +85,14 @@ const SQLITE_SCHEMA = `
     created_at  INTEGER NOT NULL
   );
 
+  CREATE TABLE IF NOT EXISTS shares (
+    id         TEXT PRIMARY KEY,
+    file_id    TEXT NOT NULL,
+    token      TEXT NOT NULL UNIQUE,
+    created_at INTEGER NOT NULL,
+    expires_at INTEGER
+  );
+
   CREATE INDEX IF NOT EXISTS idx_files_sha256 ON files(sha256);
   CREATE INDEX IF NOT EXISTS idx_files_user ON files(user_id);
   CREATE INDEX IF NOT EXISTS idx_api_keys_hash ON api_keys(key_hash);
@@ -160,6 +168,14 @@ const PG_SCHEMA = `
     author_name TEXT NOT NULL DEFAULT '',
     body        TEXT NOT NULL,
     created_at  BIGINT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS shares (
+    id         TEXT PRIMARY KEY,
+    file_id    TEXT NOT NULL,
+    token      TEXT NOT NULL UNIQUE,
+    created_at BIGINT NOT NULL,
+    expires_at BIGINT
   );
 
   CREATE INDEX IF NOT EXISTS idx_files_sha256 ON files(sha256);

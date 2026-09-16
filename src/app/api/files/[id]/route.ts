@@ -61,6 +61,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   }
 
   await db.run("UPDATE files SET deleted_at = ? WHERE id = ?", Date.now(), id);
+  await db.run("DELETE FROM shares WHERE file_id = ?", id);
   // Remove the blob from Telegram too — the row is the app's record, the
   // message is the storage. Await so dev/test can confirm; Vercel keeps the
   // function alive meanwhile.

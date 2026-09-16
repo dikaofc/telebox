@@ -47,6 +47,7 @@ export default async function FilePreview({ params }: { params: Promise<{ id: st
   );
   if (expired) {
     await db.run("UPDATE files SET deleted_at = ? WHERE id = ?", now, id);
+    await db.run("DELETE FROM shares WHERE file_id = ?", id);
     void deleteMessage(expired.tg_chat_id, expired.tg_message_id);
     notFound();
   }
