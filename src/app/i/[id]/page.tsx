@@ -17,7 +17,7 @@ function formatSize(bytes: number): string {
 // Anonymous uploads (user_id=0) are public share links. Files owned by a
 // real account are private to that account — a different (or no) session
 // gets the same result as a missing file.
-async function canAccess(id: string, rowUserId: number | null): Promise<boolean> {
+async function canAccess(rowUserId: number | null): Promise<boolean> {
   if (rowUserId == null || rowUserId === 0) return true; // public file
   const userId = await getSessionUserId();
   return userId === rowUserId;
@@ -33,7 +33,7 @@ export default async function FilePreview({ params }: { params: Promise<{ id: st
   const host = h.get("x-forwarded-host") ?? h.get("host") ?? "localhost:3000";
 
   const row = await db.get<Row>("SELECT name, mime, size, user_id FROM files WHERE id = ? AND deleted_at IS NULL", id);
-  if (!row || !(await canAccess(id, row.user_id))) notFound();
+  if (!row || !(await canAccess(row.user_id))) notFound();
 
   // Sweep: mark expired files deleted so they drop out of listings and
   // remove the Telegram blob. Server component — runs once per request, so

@@ -60,7 +60,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ path
   return buildRawResponse(row, prettyName, dl);
 }
 
-export async function HEAD(req: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
+export async function HEAD(_req: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
   const { path } = await params;
   const [id] = path;
   if (!id) return new Response(null, { status: 404 });
