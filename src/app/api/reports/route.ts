@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import db from "@/lib/db";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { deleteMessage } from "@/lib/telegram";
 import { getSessionUserId } from "@/lib/session";
 
 export const runtime = "nodejs";
@@ -57,7 +58,14 @@ export async function DELETE(req: NextRequest) {
   const report = await db.get<{ id: number; file_id: string }>("SELECT id, file_id FROM reports WHERE id = ?", reportId);
   if (!report) return NextResponse.json({ error: "not found" }, { status: 404 });
 
-  await db.run("UPDATE files SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL", Date.now(), report.file_id);
+  const file = await db.get<{ tg_chat_id: string; tg_message_id: number }>(
+    "SELECT tg_chat_id, tg_message_id FROM files WHERE id = ? AND deleted_at IS NULL",
+    report.file_id
+  );
+  if (file) {
+    await db.run("UPDATE files SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL", Date.now(), report.file_id);
+    void deleteMessage(file.tg_chat_id, file.tg_message_id);
+  }
   await db.run("UPDATE reports SET reviewed = 1 WHERE id = ?", reportId);
 
   return NextResponse.json({ ok: true });

@@ -6,6 +6,7 @@ import { sendDocument } from "@/lib/telegram";
 import { validateFile } from "@/lib/validation";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { resolveUserId } from "@/lib/session";
+import { rawUrl } from "@/lib/raw-serve";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -34,7 +35,7 @@ async function handleOneFile(file: File, userId: number, reqUrl: string, ttl: nu
     Date.now()
   );
   if (existing) {
-    return { id: existing.id, url: `${new URL(reqUrl).origin}/raw/${existing.id}`, dedup: true };
+    return { id: existing.id, url: rawUrl(new URL(reqUrl).origin, existing.id, file.name || existing.id), dedup: true };
   }
 
   const id = newId();
@@ -49,7 +50,7 @@ async function handleOneFile(file: File, userId: number, reqUrl: string, ttl: nu
     id, userId, name, mime, file.size, sha256, String(sent.chatId), sent.messageId, sent.fileId, Date.now(), expiresAt
   );
 
-  return { id, name, size: file.size, mime, url: `${new URL(reqUrl).origin}/raw/${id}` };
+  return { id, name, size: file.size, mime, url: rawUrl(new URL(reqUrl).origin, id, name) };
 }
 
 export async function POST(req: NextRequest) {

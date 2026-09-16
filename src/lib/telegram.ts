@@ -32,3 +32,19 @@ export async function getFilePath(fileId: string): Promise<string> {
 export function botFileUrl(filePath: string): string {
   return `https://api.telegram.org/file/bot${TOKEN}/${filePath}`;
 }
+
+/** Best-effort: remove the source message so the blob is gone from the channel. */
+export async function deleteMessage(chatId: string, messageId: number): Promise<void> {
+  try {
+    const res = await fetch(`${API}/deleteMessage?chat_id=${encodeURIComponent(chatId)}&message_id=${messageId}`);
+    if (!res.ok) {
+      const text = await res.text();
+      // 400 with "message to delete not found" = already gone — that's fine.
+      if (!text.includes("message to delete not found")) {
+        console.warn(`telegram deleteMessage ${res.status}: ${text}`);
+      }
+    }
+  } catch (e) {
+    console.warn("telegram deleteMessage failed", e);
+  }
+}

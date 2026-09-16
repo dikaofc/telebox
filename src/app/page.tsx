@@ -186,7 +186,7 @@ export default function Home() {
               <div style={{ marginTop: 6, fontSize: 13 }}>
                 <a href={`/i/${r.id}`}>preview</a>
                 {" / "}
-                <a href={`/raw/${r.id}?dl=1`}>download</a>
+                <a href={`${r.url}?dl=1`}>download</a>
               </div>
             </div>
           ))}

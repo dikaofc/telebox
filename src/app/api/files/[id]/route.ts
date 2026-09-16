@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import db from "@/lib/db";
+import { rawUrl } from "@/lib/raw-serve";
+import { deleteMessage } from "@/lib/telegram";
 import { resolveUserId, getSessionUserId } from "@/lib/session";
 
 export const runtime = "nodejs";
@@ -33,7 +35,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     sha256: row.sha256,
     created_at: new Date(row.created_at).toISOString(),
     url: `${origin}/i/${row.id}`,
-    direct_url: `${origin}/raw/${row.id}`,
+    direct_url: rawUrl(origin, row.id, row.name),
   });
 }
 
@@ -41,7 +43,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
 
-  const row = await db.get<{ user_id: number }>("SELECT user_id FROM files WHERE id = ? AND deleted_at IS NULL", id);
+  const row = await db.get<{ user_id: number; tg_chat_id: string; tg_message_id: number }>(
+    "SELECT user_id, tg_chat_id, tg_message_id FROM files WHERE id = ? AND deleted_at IS NULL",
+    id
+  );
   if (!row) return NextResponse.json({ error: "not found" }, { status: 404 });
 
   const userId = await resolveUserId(req);
@@ -50,5 +55,9 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   }
 
   await db.run("UPDATE files SET deleted_at = ? WHERE id = ?", Date.now(), id);
+  // Remove the blob from Telegram too — the row is the app's record, the
+  // message is the storage. Await so dev/test can confirm; Vercel keeps the
+  // function alive meanwhile.
+  await deleteMessage(row.tg_chat_id, row.tg_message_id);
   return NextResponse.json({ ok: true });
 }

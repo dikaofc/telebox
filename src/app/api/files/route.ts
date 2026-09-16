@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import db from "@/lib/db";
 import { resolveUserId } from "@/lib/session";
+import { rawUrl } from "@/lib/raw-serve";
 
 export const runtime = "nodejs";
 
@@ -26,7 +27,7 @@ export async function GET(req: NextRequest) {
       created_at: new Date(r.created_at).toISOString(),
       expires_at: r.expires_at ? new Date(r.expires_at).toISOString() : null,
       url: `${origin}/i/${r.id}`,
-      direct_url: `${origin}/raw/${r.id}`,
+      direct_url: rawUrl(origin, r.id, r.name),
     })),
   });
 }

@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import db from "@/lib/db";
+import { deleteMessage } from "@/lib/telegram";
 import { TextPreview } from "@/components/text-preview";
 import { ReportLink } from "@/components/report-link";
 
@@ -17,10 +18,16 @@ export default async function FilePreview({ params }: { params: Promise<{ id: st
   const row = await db.get<Row>("SELECT name, mime, size FROM files WHERE id = ? AND deleted_at IS NULL", id);
   if (!row) notFound();
 
-  // Sweep: mark expired files deleted so they drop out of listings.
-  const expired = await db.get("SELECT 1 FROM files WHERE id = ? AND expires_at IS NOT NULL AND expires_at < ?", id, Date.now());
+  // Sweep: mark expired files deleted so they drop out of listings and
+  // remove the Telegram blob.
+  const expired = await db.get<{ tg_chat_id: string; tg_message_id: number }>(
+    "SELECT tg_chat_id, tg_message_id FROM files WHERE id = ? AND expires_at IS NOT NULL AND expires_at < ?",
+    id,
+    Date.now()
+  );
   if (expired) {
     await db.run("UPDATE files SET deleted_at = ? WHERE id = ?", Date.now(), id);
+    void deleteMessage(expired.tg_chat_id, expired.tg_message_id);
     notFound();
   }
 
@@ -70,7 +77,7 @@ export default async function FilePreview({ params }: { params: Promise<{ id: st
 
       <div style={{ marginTop: 24, display: "flex", gap: 12, flexWrap: "wrap" }}>
         <a
-          href={`/raw/${id}?dl=1`}
+          href={`/raw/${id}/${encodeURIComponent(row.name)}?dl=1`}
           download={safeName}
           style={{
             padding: "8px 16px",
@@ -85,7 +92,7 @@ export default async function FilePreview({ params }: { params: Promise<{ id: st
         </a>
         <button
           onClick={() => {
-            navigator.clipboard.writeText(window.location.origin + `/raw/${id}`);
+            navigator.clipboard.writeText(window.location.origin + `/raw/${id}/${encodeURIComponent(row.name)}`);
           }}
           style={{
             padding: "8px 16px",
