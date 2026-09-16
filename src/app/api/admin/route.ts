@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import db from "@/lib/db";
-import { getSessionUserId } from "@/lib/session";
+import { isAdmin } from "@/lib/session";
 
 export const runtime = "nodejs";
 
@@ -14,8 +14,7 @@ type Stats = {
 };
 
 export async function GET(req: NextRequest) {
-  const userId = await getSessionUserId();
-  if (!userId) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  if (!(await isAdmin())) return NextResponse.json({ error: "forbidden" }, { status: 403 });
 
   const fileStats = (await db.get<{ total_files: number; total_size: number; unique_shas: number }>(
     "SELECT COUNT(*) as total_files, COALESCE(SUM(size), 0) as total_size, COUNT(DISTINCT sha256) as unique_shas FROM files WHERE deleted_at IS NULL"

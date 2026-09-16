@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import db from "@/lib/db";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { deleteMessage } from "@/lib/telegram";
-import { getSessionUserId } from "@/lib/session";
+import { isAdmin } from "@/lib/session";
 
 export const runtime = "nodejs";
 
@@ -32,8 +32,7 @@ export async function POST(req: NextRequest) {
 
 /** Admin-only. List open reports with file details, newest first. */
 export async function GET() {
-  const userId = await getSessionUserId();
-  if (!userId) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  if (!(await isAdmin())) return NextResponse.json({ error: "forbidden" }, { status: 403 });
 
   const rows = (await db.all<{ id: number; file_id: string; reason: string; created_at: number; reviewed: number; name: string | null; mime: string | null; size: number | null }>(
     `SELECT r.id, r.file_id, r.reason, r.created_at, r.reviewed,
@@ -48,8 +47,7 @@ export async function GET() {
 
 /** Admin-only. Mark a report reviewed and soft-delete the reported file. */
 export async function DELETE(req: NextRequest) {
-  const userId = await getSessionUserId();
-  if (!userId) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  if (!(await isAdmin())) return NextResponse.json({ error: "forbidden" }, { status: 403 });
 
   const body = await req.json().catch(() => null);
   const reportId = Number(body?.id);
