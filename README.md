@@ -35,7 +35,7 @@ Open http://localhost:3000
 - Raw file serving at `/raw/:id[/filename]` with long-lived cache headers
 - Accounts, ownership, delete (soft-deletes the row **and** removes the Telegram blob)
 - API keys (`tb_` prefix) for CLI access
-- Expiration TTL (1 hour to 30 days), lazy sweep on access
+- Expiration TTL (1 hour to 30 days), guaranteed by a janitor (cron + self-heal)
 - Magic-byte validation (extension spoof protection)
 - Rate limiting on upload, signup (5/60s), login (10/60s)
 - Public pastebin: create pastes, comment, like, star — anyone can read and copy, reactions are per-person (account or IP-derived for anonymous)

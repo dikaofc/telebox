@@ -7,6 +7,7 @@ import { validateFile } from "@/lib/validation";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { resolveUserId } from "@/lib/session";
 import { rawUrl } from "@/lib/raw-serve";
+import { purgeExpired } from "@/lib/purge";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -14,6 +15,12 @@ export const maxDuration = 60;
 const MAX_BYTES = 50 * 1024 * 1024;
 const MIN_TTL = 60; // seconds
 const MAX_TTL = 30 * 24 * 60 * 60; // 30 days
+
+// Self-heal: ~1 in 20 uploads runs the janitor, so expiry stays real even
+// without a cron reachable. Bounded and cheap; cron remains the guarantee.
+function maybePurge(): void {
+  if (Math.random() < 0.05) void purgeExpired();
+}
 
 function parseTtl(raw: string | null): number | null {
   if (!raw) return null;
@@ -58,6 +65,7 @@ async function handleOneFile(file: File, userId: number, reqUrl: string, ttl: nu
 }
 
 export async function POST(req: NextRequest) {
+  maybePurge();
   const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? req.headers.get("x-real-ip") ?? "unknown";
   const rl = await checkRateLimit(`upload:${ip}`, 10, 60_000);
   if (!rl.allowed) {
