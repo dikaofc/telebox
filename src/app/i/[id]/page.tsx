@@ -1,10 +1,12 @@
 import { notFound } from "next/navigation";
+import { headers } from "next/headers";
 import db from "@/lib/db";
+import { getSessionUserId } from "@/lib/session";
 import { deleteMessage } from "@/lib/telegram";
 import { TextPreview } from "@/components/text-preview";
-import { ReportLink } from "@/components/report-link";
+import { CopyUrlButton } from "@/components/copy-url-button";
 
-type Row = { name: string; mime: string; size: number };
+type Row = { name: string; mime: string; size: number; user_id: number | null };
 
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -12,11 +14,26 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
+// Anonymous uploads (user_id=0) are public share links. Files owned by a
+// real account are private to that account — a different (or no) session
+// gets the same result as a missing file.
+async function canAccess(id: string, rowUserId: number | null): Promise<boolean> {
+  if (rowUserId == null || rowUserId === 0) return true; // public file
+  const userId = await getSessionUserId();
+  return userId === rowUserId;
+}
+
 export default async function FilePreview({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
 
-  const row = await db.get<Row>("SELECT name, mime, size FROM files WHERE id = ? AND deleted_at IS NULL", id);
-  if (!row) notFound();
+  // Absolute URL for the copy button; server components can't see the
+  // browser location, so rebuild it from request headers.
+  const h = await headers();
+  const proto = h.get("x-forwarded-proto") ?? "http";
+  const host = h.get("x-forwarded-host") ?? h.get("host") ?? "localhost:3000";
+
+  const row = await db.get<Row>("SELECT name, mime, size, user_id FROM files WHERE id = ? AND deleted_at IS NULL", id);
+  if (!row || !(await canAccess(id, row.user_id))) notFound();
 
   // Sweep: mark expired files deleted so they drop out of listings and
   // remove the Telegram blob.
@@ -90,22 +107,7 @@ export default async function FilePreview({ params }: { params: Promise<{ id: st
         >
           Download
         </a>
-        <button
-          onClick={() => {
-            navigator.clipboard.writeText(window.location.origin + `/raw/${id}/${encodeURIComponent(row.name)}`);
-          }}
-          style={{
-            padding: "8px 16px",
-            background: "#eee",
-            border: "1px solid #ccc",
-            borderRadius: 6,
-            cursor: "pointer",
-            fontSize: 14,
-          }}
-        >
-          Copy URL
-        </button>
-        <ReportLink id={id} />
+        <CopyUrlButton url={`${proto}://${host}/raw/${id}/${encodeURIComponent(row.name)}`} />
       </div>
     </main>
   );

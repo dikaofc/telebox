@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import db from "@/lib/db";
+import { getSessionUserId } from "@/lib/session";
 import { isExpired, buildRawResponse, type RawRow } from "@/lib/raw-serve";
 import { deleteMessage } from "@/lib/telegram";
 
@@ -20,11 +21,21 @@ async function sweepExpired(id: string): Promise<void> {
   }
 }
 
+type Row = { user_id: number | null } & RawRow;
+
 async function getRow(id: string) {
-  return db.get<RawRow>(
-    "SELECT name, mime, size, tg_file_id, expires_at FROM files WHERE id = ? AND deleted_at IS NULL",
+  return db.get<Row>(
+    "SELECT name, mime, size, tg_file_id, expires_at, user_id FROM files WHERE id = ? AND deleted_at IS NULL",
     id
   );
+}
+
+// Anonymous uploads (user_id=0) are public share links; account files are
+// private to the owner. Unknown id or wrong owner both read as 404.
+async function canAccess(rowUserId: number | null): Promise<boolean> {
+  if (rowUserId == null || rowUserId === 0) return true;
+  const userId = await getSessionUserId();
+  return userId === rowUserId;
 }
 
 /**
@@ -38,7 +49,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ path
   const prettyName = rest.length > 0 ? decodeURIComponent(rest.join("/")) : null;
 
   const row = await getRow(id);
-  if (!row) return new Response("not found", { status: 404 });
+  if (!row || !(await canAccess(row.user_id))) return new Response("not found", { status: 404 });
   if (isExpired(row)) {
     await sweepExpired(id);
     return new Response("file expired", { status: 410 });
@@ -53,11 +64,11 @@ export async function HEAD(req: NextRequest, { params }: { params: Promise<{ pat
   const [id] = path;
   if (!id) return new Response(null, { status: 404 });
 
-  const row = await db.get<{ size: number; expires_at: number | null }>(
-    "SELECT size, expires_at FROM files WHERE id = ? AND deleted_at IS NULL",
+  const row = await db.get<{ size: number; expires_at: number | null; user_id: number | null }>(
+    "SELECT size, expires_at, user_id FROM files WHERE id = ? AND deleted_at IS NULL",
     id
   );
-  if (!row) return new Response(null, { status: 404 });
+  if (!row || !(await canAccess(row.user_id))) return new Response(null, { status: 404 });
   if (row.expires_at !== null && Date.now() > row.expires_at) {
     await sweepExpired(id);
     return new Response(null, { status: 410 });

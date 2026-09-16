@@ -81,16 +81,6 @@ export async function resolveUserId(req: NextRequest): Promise<number> {
   return (await getUserIdFromApiKey(req)) ?? 0;
 }
 
-const ADMIN_EMAILS = (process.env.ADMIN_EMAIL ?? "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
-
-/** Admin = session user whose email is listed in ADMIN_EMAIL. Deny when unset. */
-export async function isAdmin(): Promise<boolean> {
-  const userId = await getSessionUserId();
-  if (!userId) return false;
-  const row = await db.get<{ email: string }>("SELECT email FROM users WHERE id = ?", userId);
-  return !!row && ADMIN_EMAILS.includes(row.email.toLowerCase());
-}
-
 export function setSessionCookie(token: string) {
   return {
     "Set-Cookie": `${COOKIE_NAME}=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${MAX_AGE}`,

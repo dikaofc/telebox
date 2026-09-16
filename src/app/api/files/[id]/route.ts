@@ -16,7 +16,8 @@ type Row = {
   created_at: number;
 };
 
-// Get single file info
+// Get single file info. Public files (user_id=0, anonymous uploads) are
+// open share links; account files are private to their owner.
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
 
@@ -25,6 +26,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     id
   );
   if (!row) return NextResponse.json({ error: "not found" }, { status: 404 });
+
+  const userId = await resolveUserId(req);
+  if (row.user_id !== 0 && userId !== row.user_id) {
+    return NextResponse.json({ error: "not found" }, { status: 404 });
+  }
 
   const origin = new URL(req.url).origin;
   return NextResponse.json({

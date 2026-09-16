@@ -85,8 +85,6 @@ export default function Home() {
               {auth.email}{" "}
               <a href="/my" style={{ color: "#666", textDecoration: "underline" }}>files</a>
               {" / "}
-              <a href="/admin" style={{ color: "#666", textDecoration: "underline" }}>admin</a>
-              {" / "}
               <button onClick={logout} style={{ background: "none", border: "none", color: "#999", cursor: "pointer", textDecoration: "underline" }}>logout</button>
             </>
           ) : (

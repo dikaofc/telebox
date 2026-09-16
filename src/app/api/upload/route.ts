@@ -29,9 +29,13 @@ async function handleOneFile(file: File, userId: number, reqUrl: string, ttl: nu
   if (!v.valid) return { error: `${file.name}: ${v.error}`, status: 415 as const };
   const sha256 = createHash("sha256").update(buf).digest("hex");
 
+  // Dedup only within the same owner: account files are private, so a
+  // second user uploading identical bytes must not receive the first user's
+  // link. Anonymous (user_id=0) is one shared public pool.
   const existing = await db.get<{ id: string }>(
-    "SELECT id FROM files WHERE sha256 = ? AND deleted_at IS NULL AND (expires_at IS NULL OR expires_at > ?)",
+    "SELECT id FROM files WHERE sha256 = ? AND user_id = ? AND deleted_at IS NULL AND (expires_at IS NULL OR expires_at > ?)",
     sha256,
+    userId,
     Date.now()
   );
   if (existing) {
