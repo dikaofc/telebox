@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { SiteNav } from "@/components/site-nav";
+import { IconPlus } from "@/components/icons";
 import { LANGUAGES } from "@/lib/paste";
 
 export default function NewPastePage() {

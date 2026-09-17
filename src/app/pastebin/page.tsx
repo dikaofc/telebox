@@ -46,7 +46,7 @@ export default function PastebinPage() {
 
   return (
     <>
-      <SiteNav showNewPaste />
+      <SiteNav />
       <main className="container">
         <div className="page-header">
           <div>

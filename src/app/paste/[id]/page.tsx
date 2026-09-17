@@ -57,7 +57,7 @@ export default async function PastePage({ params }: { params: Promise<{ id: stri
 
   return (
     <>
-      <SiteNav showNewPaste />
+      <SiteNav />
       <main className="container">
         <div className="page-header">
           <div style={{ minWidth: 0 }}>
