@@ -12,7 +12,7 @@ import { purgeExpired } from "@/lib/purge";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-const MAX_BYTES = 50 * 1024 * 1024;
+const MAX_BYTES = 50 * 1024 * 1024; // Vercel hobby 4.5MB hard limit; streaming not possible, 413 will still happen on large files
 const MIN_TTL = 60; // seconds
 const MAX_TTL = 30 * 24 * 60 * 60; // 30 days
 

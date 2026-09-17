@@ -1,8 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import Link from "next/link";
-import { IconBox, IconPaste, IconFile, IconUser, IconLogout, IconLogin, IconPlus } from "@/components/icons";
+import { IconBox } from "@/components/icons";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 type Auth = { logged_in: boolean; email?: string };
@@ -23,49 +22,41 @@ export function SiteNav() {
 
   return (
     <nav className="nav" aria-label="Main">
-      <Link href="/" className="nav-brand" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      <a href="/" className="nav-brand" style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <IconBox size={18} />
         telebox
-      </Link>
-      <div className="nav-links">
-        <Link href="/" className="nav-link" style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-          <IconBox size={14} />
+      </a>
+      <div className="nav-links" style={{ display: "flex", gap: 6 }}>
+        <button type="button" className="btn btn-sm" onClick={() => (window.location.href = "/")}>
           home
-        </Link>
-        <Link href="/pastebin" className="nav-link" style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-          <IconPaste size={14} />
+        </button>
+        <button type="button" className="btn btn-sm" onClick={() => (window.location.href = "/pastebin")}>
           pastebin
-        </Link>
-        <Link href="/paste/new" className="nav-link" style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-          <IconPlus size={14} />
+        </button>
+        <button type="button" className="btn btn-sm" onClick={() => (window.location.href = "/paste/new")}>
           new paste
-        </Link>
+        </button>
         <ThemeToggle />
         {auth?.logged_in ? (
           <>
-            <Link href="/my" className="nav-link" style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-              <IconFile size={14} />
+            <button type="button" className="btn btn-sm" onClick={() => (window.location.href = "/my")}>
               files
-            </Link>
-            <Link href="/profile" className="nav-link" style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-              <IconUser size={14} />
+            </button>
+            <button type="button" className="btn btn-sm" onClick={() => (window.location.href = "/profile")}>
               profile
-            </Link>
+            </button>
             <button
               type="button"
+              className="btn btn-sm"
               onClick={() => fetch("/api/auth/logout", { method: "POST" }).then(() => setAuth({ logged_in: false }))}
-              className="nav-btn"
-              style={{ display: "inline-flex", alignItems: "center", gap: 4 }}
             >
-              <IconLogout size={14} />
               logout
             </button>
           </>
         ) : (
-          <Link href="/" className="nav-link" style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-            <IconLogin size={14} />
+          <button type="button" className="btn btn-sm" onClick={() => (window.location.href = "/")}>
             login
-          </Link>
+          </button>
         )}
       </div>
     </nav>
