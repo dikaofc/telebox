@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { SiteNav } from "@/components/site-nav";
-import { IconPlus } from "@/components/icons";
 import { LANGUAGES } from "@/lib/paste";
 
 export default function NewPastePage() {
@@ -35,7 +34,7 @@ export default function NewPastePage() {
 
   return (
     <>
-      <SiteNav showNewPaste />
+      <SiteNav />
       <main className="container">
         <div className="page-header">
           <h1 className="page-title">New Paste</h1>

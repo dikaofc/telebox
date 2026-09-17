@@ -10,7 +10,7 @@ type Auth = { logged_in: boolean; email?: string };
  * Shared top navigation. Fetches auth state once; used by every page so the
  * header is consistent (and the email is never shown).
  */
-export function SiteNav({ showNewPaste = false }: { showNewPaste?: boolean }) {
+export function SiteNav() {
   const [auth, setAuth] = useState<Auth | null>(null);
 
   useEffect(() => {
@@ -27,15 +27,17 @@ export function SiteNav({ showNewPaste = false }: { showNewPaste?: boolean }) {
         telebox
       </Link>
       <div className="nav-links">
-        {showNewPaste && (
-          <Link href="/paste/new" className="nav-link" style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-            <IconPlus size={14} />
-            paste
-          </Link>
-        )}
+        <Link href="/" className="nav-link" style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+          <IconBox size={14} />
+          home
+        </Link>
         <Link href="/pastebin" className="nav-link" style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
           <IconPaste size={14} />
           pastebin
+        </Link>
+        <Link href="/paste/new" className="nav-link" style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+          <IconPlus size={14} />
+          new paste
         </Link>
         {auth?.logged_in ? (
           <>

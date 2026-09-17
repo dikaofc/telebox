@@ -42,7 +42,13 @@ export default function Home() {
       arr.forEach((f) => fd.append("file", f));
       if (ttl) fd.append("ttl", ttl);
       const res = await fetch("/api/upload", { method: "POST", body: fd });
-      const json: UploadResult = await res.json();
+      const text = await res.text();
+      let json: UploadResult;
+      try {
+        json = JSON.parse(text) as UploadResult;
+      } catch {
+        throw new Error(`upload failed (HTTP ${res.status}): ${text.slice(0, 200)}`);
+      }
       if (!res.ok) throw new Error((json as { error?: string }).error ?? res.statusText);
       if ("files" in json) setResults(json.files);
       else setResults([json]);
