@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { SiteNav } from "@/components/site-nav";
+import { IconUpload, IconFile, IconDownload, IconClock, IconEye, IconCopy } from "@/components/icons";
 
 type Result = { id: string; url: string; name: string; size?: number; mime?: string; dedup?: boolean };
 type UploadResult = Result | { files: Result[] };
@@ -70,129 +72,115 @@ export default function Home() {
     }
   }
 
-  async function logout() {
-    await fetch("/api/auth/logout", { method: "POST" });
-    setAuth({ logged_in: false });
-  }
-
   return (
-    <main style={{ maxWidth: 560, margin: "10vh auto", padding: 24, fontFamily: "system-ui, sans-serif" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <h1 style={{ fontSize: 28, margin: 0 }}>telebox</h1>
-        <div style={{ fontSize: 13, color: "#666", display: "flex", gap: 8, alignItems: "center" }}>
-          <a href="/pastebin" style={{ color: "#666", textDecoration: "underline" }}>pastebin</a>
-          {" / "}
-          {auth?.logged_in ? (
-            <>
-              <a href="/my" style={{ color: "#666", textDecoration: "underline" }}>files</a>
-              {" / "}
-              <a href="/profile" style={{ color: "#666", textDecoration: "underline" }}>profile</a>
-              {" / "}
-              <button onClick={logout} style={{ background: "none", border: "none", color: "#999", cursor: "pointer", textDecoration: "underline" }}>logout</button>
-            </>
-          ) : (
-            <>
-              <button onClick={() => setAuthMode("login")} style={{ background: "none", border: "none", color: "#666", cursor: "pointer", textDecoration: "underline" }}>login</button>
-              {" / "}
-              <button onClick={() => setAuthMode("signup")} style={{ background: "none", border: "none", color: "#666", cursor: "pointer", textDecoration: "underline" }}>signup</button>
-            </>
+    <>
+      <SiteNav />
+      <main className="container container-narrow">
+        <div className="page-header">
+          <div>
+            <h1 className="page-title">Upload files</h1>
+            <p className="muted" style={{ margin: "6px 0 0", fontSize: 14 }}>
+              simple file hosting. telegram-backed storage.
+            </p>
+          </div>
+          {auth?.logged_in === false && (
+            <div style={{ display: "flex", gap: 8 }}>
+              <button type="button" className="btn btn-sm" onClick={() => setAuthMode("login")}>login</button>
+              <button type="button" className="btn btn-sm btn-primary" onClick={() => setAuthMode("signup")}>signup</button>
+            </div>
           )}
         </div>
-      </div>
-      <p style={{ color: "#666", marginTop: 6 }}>simple file hosting. telegram-backed storage.</p>
 
-      {authMode && (
-        <form
-          onSubmit={(e) => { e.preventDefault(); authSubmit(authMode); }}
-          style={{ marginTop: 20, padding: 16, background: "#f5f5f5", borderRadius: 8 }}
-        >
-          <h3 style={{ margin: "0 0 12px" }}>{authMode === "login" ? "Login" : "Sign Up"}</h3>
-          <input
-            type="email"
-            placeholder="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            style={{ display: "block", width: "100%", padding: 8, marginBottom: 8, borderRadius: 4, border: "1px solid #ccc", fontSize: 14, boxSizing: "border-box" }}
-          />
-          <input
-            type="password"
-            placeholder="password (min 8 chars)"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            minLength={8}
-            style={{ display: "block", width: "100%", padding: 8, marginBottom: 12, borderRadius: 4, border: "1px solid #ccc", fontSize: 14, boxSizing: "border-box" }}
-          />
-          <div style={{ display: "flex", gap: 8 }}>
-            <button type="submit" style={{ padding: "8px 16px", background: "#111", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 14 }}>
-              {authMode === "login" ? "Login" : "Sign Up"}
-            </button>
-            <button type="button" onClick={() => setAuthMode(null)} style={{ padding: "8px 16px", background: "#eee", border: "1px solid #ccc", borderRadius: 6, cursor: "pointer", fontSize: 14 }}>
-              Cancel
-            </button>
-          </div>
-        </form>
-      )}
-
-      <label
-        onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-        onDragLeave={() => setDragOver(false)}
-        onDrop={(e) => { e.preventDefault(); setDragOver(false); uploadFiles(e.dataTransfer.files); }}
-        style={{
-          display: "block",
-          border: dragOver ? "2px solid #111" : "1px dashed #999",
-          borderRadius: 8,
-          padding: 40,
-          textAlign: "center",
-          cursor: "pointer",
-          marginTop: 24,
-          background: dragOver ? "#f5f5f5" : "transparent",
-        }}
-      >
-        <input
-          type="file"
-          multiple
-          hidden
-          onChange={(e) => { if (e.target.files) uploadFiles(e.target.files); }}
-        />
-        {busy ? "uploading\u2026" : "drop files or click to choose (multi-file ok)"}
-        <label
-          style={{ display: "block", fontSize: 13, color: "#666", marginTop: 16 }}
-        >
-          Expiry:{" "}
-          <select
-            value={ttl}
-            onChange={(e) => setTtl(e.target.value)}
-            style={{ padding: "4px 8px", borderRadius: 4, border: "1px solid #ccc", fontSize: 13, marginLeft: 4 }}
+        {authMode && (
+          <form
+            onSubmit={(e) => { e.preventDefault(); authSubmit(authMode); }}
+            className="card"
+            style={{ background: "var(--surface)" }}
           >
-            {TTL_OPTIONS.map(([v, label]) => (
-              <option key={v || "never"} value={v}>{label}</option>
-            ))}
-          </select>
-        </label>
-      </label>
-
-      {error && <p style={{ color: "#c00", marginTop: 16 }}>{error}</p>}
-
-      {results.length > 0 && (
-        <div style={{ marginTop: 16 }}>
-          {results.map((r) => (
-            <div key={r.id} style={{ marginBottom: 12, padding: 12, background: "#f9f9f9", borderRadius: 8 }}>
-              <div style={{ fontSize: 14, fontWeight: 500, wordBreak: "break-all" }}>{r.name}</div>
-              {r.dedup && <div style={{ fontSize: 12, color: "#666" }}>dedup (already hosted)</div>}
-              <code style={{ display: "block", marginTop: 4, padding: 6, background: "#f2f2f2", borderRadius: 4, fontSize: 13, wordBreak: "break-all" }}>
-                {r.url}
-              </code>
-              <div style={{ marginTop: 6, fontSize: 13 }}>
-                <a href={`/i/${r.id}`}>preview</a>
-                {" / "}
-                <a href={`${r.url}?dl=1`}>download</a>
-              </div>
+            <h3 className="section-title">{authMode === "login" ? "Login" : "Sign Up"}</h3>
+            <div className="field">
+              <label className="field-label" htmlFor="auth-email">email</label>
+              <input id="auth-email" type="email" className="input" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} required />
             </div>
-          ))}
-        </div>
-      )}
-    </main>
+            <div className="field">
+              <label className="field-label" htmlFor="auth-password">password</label>
+              <input id="auth-password" type="password" className="input" placeholder={authMode === "signup" ? "min 8 characters" : "your password"} value={password} onChange={(e) => setPassword(e.target.value)} required minLength={8} />
+            </div>
+            <div className="form-row">
+              <button type="submit" className="btn btn-primary">{authMode === "login" ? "Login" : "Sign Up"}</button>
+              <button type="button" className="btn" onClick={() => setAuthMode(null)}>Cancel</button>
+            </div>
+          </form>
+        )}
+
+        <label
+          onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={(e) => { e.preventDefault(); setDragOver(false); uploadFiles(e.dataTransfer.files); }}
+          className="dropzone"
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 10,
+            border: dragOver ? "2px solid var(--foreground)" : "1px dashed var(--faint)",
+            borderRadius: "var(--radius)",
+            padding: "48px 24px",
+            textAlign: "center",
+            cursor: "pointer",
+            marginTop: 8,
+            background: dragOver ? "var(--surface)" : "transparent",
+            transition: "border-color .12s, background .12s",
+          }}
+        >
+          <input type="file" multiple hidden onChange={(e) => { if (e.target.files) uploadFiles(e.target.files); }} />
+          <IconUpload size={32} />
+          {busy ? "uploading\u2026" : "drop files or click to choose (multi-file ok)"}
+          <span className="faint" style={{ fontSize: 13, display: "inline-flex", alignItems: "center", gap: 4 }}>
+            <IconClock size={13} />
+            Expiry:
+            <select value={ttl} onChange={(e) => setTtl(e.target.value)} className="select" style={{ padding: "4px 8px", fontSize: 13, marginLeft: 4 }}>
+              {TTL_OPTIONS.map(([v, label]) => (
+                <option key={v || "never"} value={v}>{label}</option>
+              ))}
+            </select>
+          </span>
+        </label>
+
+        {error && <p className="error-text">{error}</p>}
+
+        {results.length > 0 && (
+          <div style={{ marginTop: 16 }}>
+            {results.map((r) => (
+              <div key={r.id} className="card" style={{ background: "var(--surface)" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <IconFile size={15} />
+                  <span style={{ fontWeight: 500, wordBreak: "break-all" }}>{r.name}</span>
+                  {r.dedup && <span className="badge">dedup</span>}
+                </div>
+                <code className="code-block" style={{ marginTop: 8 }}>{r.url}</code>
+                <div className="card-actions">
+                  <a href={`/i/${r.id}`} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                    <IconEye size={14} /> preview
+                  </a>
+                  <a href={`${r.url}?dl=1`} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                    <IconDownload size={14} /> download
+                  </a>
+                  <button
+                    type="button"
+                    className="link-btn"
+                    style={{ display: "inline-flex", alignItems: "center", gap: 4, textDecoration: "none" }}
+                    onClick={() => navigator.clipboard.writeText(r.url)}
+                  >
+                    <IconCopy size={14} /> copy
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </main>
+    </>
   );
 }

@@ -5,6 +5,8 @@ import { getSessionUserId } from "@/lib/session";
 import { deleteMessage } from "@/lib/telegram";
 import { TextPreview } from "@/components/text-preview";
 import { CopyUrlButton } from "@/components/copy-url-button";
+import { SiteNav } from "@/components/site-nav";
+import { IconDownload, IconArrowLeft, IconFile } from "@/components/icons";
 
 type Row = { name: string; mime: string; size: number; user_id: number | null };
 
@@ -57,11 +59,22 @@ export default async function FilePreview({ params }: { params: Promise<{ id: st
   const isText = mediaType === "text" || row.mime === "application/json" || row.mime === "image/svg+xml";
 
   return (
-    <main style={{ maxWidth: 720, margin: "4vh auto", padding: 24, fontFamily: "system-ui, sans-serif" }}>
-      <h1 style={{ fontSize: 20, margin: 0, wordBreak: "break-all" }}>{safeName}</h1>
-      <p style={{ color: "#666", marginTop: 4, fontSize: 14 }}>
-        {formatSize(row.size)} &middot; {row.mime.split("/").pop()?.toUpperCase()}
-      </p>
+    <>
+      <SiteNav />
+      <main className="container">
+        <div className="page-header" style={{ alignItems: "flex-start" }}>
+          <div style={{ minWidth: 0 }}>
+            <h1 style={{ fontSize: 20, margin: "0 0 4px", wordBreak: "break-all", display: "flex", alignItems: "center", gap: 8 }}>
+              <IconFile size={18} /> {safeName}
+            </h1>
+            <p style={{ color: "var(--muted)", margin: 0, fontSize: 14 }}>
+              {formatSize(row.size)} &middot; {row.mime.split("/").pop()?.toUpperCase()}
+            </p>
+          </div>
+          <a href="/my" className="link-btn" style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+            <IconArrowLeft size={14} /> files
+          </a>
+        </div>
 
       {mediaType === "image" && row.mime !== "image/svg+xml" && (
         <div style={{ marginTop: 24, textAlign: "center" }}>
@@ -100,19 +113,15 @@ export default async function FilePreview({ params }: { params: Promise<{ id: st
         <a
           href={`/raw/${id}/${encodeURIComponent(row.name)}?dl=1`}
           download={safeName}
-          style={{
-            padding: "8px 16px",
-            background: "#111",
-            color: "#fff",
-            textDecoration: "none",
-            borderRadius: 6,
-            fontSize: 14,
-          }}
+          className="btn btn-primary"
+          style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
         >
+          <IconDownload size={15} />
           Download
         </a>
         <CopyUrlButton url={`${proto}://${host}/raw/${id}/${encodeURIComponent(row.name)}`} />
       </div>
-    </main>
+      </main>
+    </>
   );
 }

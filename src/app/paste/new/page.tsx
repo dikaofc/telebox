@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { SiteNav } from "@/components/site-nav";
+import { IconPlus } from "@/components/icons";
 import { LANGUAGES } from "@/lib/paste";
 
 export default function NewPastePage() {
@@ -32,46 +34,42 @@ export default function NewPastePage() {
   }
 
   return (
-    <main style={{ maxWidth: 720, margin: "6vh auto", padding: 24, fontFamily: "system-ui, sans-serif" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-        <h1 style={{ fontSize: 24, margin: 0 }}>New Paste</h1>
-        <a href="/pastebin" style={{ fontSize: 13, color: "#666" }}>back to pastebin</a>
-      </div>
-
-      <form onSubmit={submit}>
-        <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-          <input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="title"
-            required
-            style={{ flex: 1, padding: 10, borderRadius: 6, border: "1px solid #ccc", fontSize: 14 }}
-          />
-          <select
-            value={language}
-            onChange={(e) => setLanguage(e.target.value)}
-            style={{ padding: 10, borderRadius: 6, border: "1px solid #ccc", fontSize: 14 }}
-          >
-            {LANGUAGES.map((l) => <option key={l} value={l}>{l}</option>)}
-          </select>
+    <>
+      <SiteNav showNewPaste />
+      <main className="container">
+        <div className="page-header">
+          <h1 className="page-title">New Paste</h1>
         </div>
-        <textarea
-          value={content}
-          onChange={(e) => setContent(e.target.value)}
-          placeholder="paste your code or text..."
-          required
-          rows={16}
-          style={{ width: "100%", padding: 10, borderRadius: 6, border: "1px solid #ccc", fontSize: 13, fontFamily: "monospace", boxSizing: "border-box" }}
-        />
-        {error && <p style={{ color: "#c00", marginTop: 8 }}>{error}</p>}
-        <button
-          type="submit"
-          disabled={busy}
-          style={{ marginTop: 12, padding: "10px 24px", background: "#111", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 14 }}
-        >
-          {busy ? "Creating..." : "Create Paste"}
-        </button>
-      </form>
-    </main>
+
+        <form onSubmit={submit} className="card" style={{ border: "none", padding: 0 }}>
+          <div className="form-row">
+            <input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="title"
+              required
+              aria-label="Paste title"
+              className="input"
+            />
+            <select value={language} onChange={(e) => setLanguage(e.target.value)} aria-label="Language" className="select">
+              {LANGUAGES.map((l) => <option key={l} value={l}>{l}</option>)}
+            </select>
+          </div>
+          <textarea
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            placeholder="paste your code or text..."
+            required
+            rows={16}
+            aria-label="Paste content"
+            className="textarea"
+          />
+          {error && <p className="error-text">{error}</p>}
+          <button type="submit" disabled={busy} className="btn btn-primary" style={{ marginTop: 12, display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <IconPlus size={15} /> {busy ? "Creating..." : "Create Paste"}
+          </button>
+        </form>
+      </main>
+    </>
   );
 }

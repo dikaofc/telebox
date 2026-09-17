@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import Link from "next/link";
+import { SiteNav } from "@/components/site-nav";
 import { SharePanel } from "@/components/share-panel";
+import { IconKey, IconFile, IconTrash, IconCopy, IconClock } from "@/components/icons";
 
 type FileItem = { id: string; name: string; mime: string; size: number; created_at: string; expires_at: string | null; url: string; direct_url: string };
 type KeyItem = { id: number; name: string; created_at: string; last_used_at: string | null };
@@ -20,6 +21,7 @@ export default function MyPage() {
   const [newKeyValue, setNewKeyValue] = useState<string | null>(null);
   const [tab, setTab] = useState<"files" | "keys">("files");
   const [error, setError] = useState<string | null>(null);
+  const [copiedKey, setCopiedKey] = useState(false);
 
   function loadFiles() {
     fetch("/api/files").then((r) => r.json()).then((d) => setFiles(d.files ?? [])).catch(() => {});
@@ -52,6 +54,12 @@ export default function MyPage() {
     loadKeys();
   }
 
+  async function copyKey() {
+    if (newKeyValue) await navigator.clipboard.writeText(newKeyValue);
+    setCopiedKey(true);
+    setTimeout(() => setCopiedKey(false), 1500);
+  }
+
   async function deleteKey(id: number) {
     if (!confirm("Revoke this API key?")) return;
     await fetch("/api/keys", {
@@ -63,97 +71,109 @@ export default function MyPage() {
   }
 
   return (
-    <main style={{ maxWidth: 640, margin: "6vh auto", padding: 24, fontFamily: "system-ui, sans-serif" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-        <h1 style={{ fontSize: 24, margin: 0 }}>My Account</h1>
-        <Link href="/" style={{ fontSize: 13, color: "#666" }}>back to upload</Link>
-      </div>
+    <>
+      <SiteNav />
+      <main className="container">
+        <div className="page-header">
+          <h1 className="page-title">My Account</h1>
+        </div>
 
-      <div style={{ display: "flex", gap: 16, marginBottom: 20 }}>
-        <button onClick={() => setTab("files")} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 14, fontWeight: tab === "files" ? 700 : 400, textDecoration: tab === "files" ? "underline" : "none" }}>
-          My Files
-        </button>
-        <button onClick={() => setTab("keys")} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 14, fontWeight: tab === "keys" ? 700 : 400, textDecoration: tab === "keys" ? "underline" : "none" }}>
-          API Keys
-        </button>
-      </div>
+        <div className="tabs" role="tablist" aria-label="Account sections">
+          <button
+            role="tab"
+            aria-selected={tab === "files"}
+            onClick={() => setTab("files")}
+            className={`tab ${tab === "files" ? "tab-active" : ""}`}
+            style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+          >
+            <IconFile size={14} /> My Files
+          </button>
+          <button
+            role="tab"
+            aria-selected={tab === "keys"}
+            onClick={() => setTab("keys")}
+            className={`tab ${tab === "keys" ? "tab-active" : ""}`}
+            style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+          >
+            <IconKey size={14} /> API Keys
+          </button>
+        </div>
 
-      {error && <p style={{ color: "#c00" }}>{error}</p>}
+        {error && <p className="error-text">{error}</p>}
 
-      {tab === "files" && (
-        <div>
-          {files.length === 0 && <p style={{ color: "#999" }}>No files yet.</p>}
-          {files.map((f) => (
-            <div key={f.id} style={{ padding: "10px 0", borderBottom: "1px solid #eee" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <div style={{ minWidth: 0, flex: 1 }}>
-                  <a href={`/i/${f.id}`} style={{ fontSize: 14, wordBreak: "break-all", textDecoration: "none", color: "#111" }}>
-                    {f.name}
-                  </a>
-                  <div style={{ fontSize: 12, color: "#666", marginTop: 2 }}>
-                    {formatSize(f.size)} &middot; {new Date(f.created_at).toLocaleDateString()}
-                    {f.expires_at && (
-                      <span style={{ color: new Date(f.expires_at) < new Date() ? "#c00" : "#b8860b" }}>
-                        {" "}&middot; expires {new Date(f.expires_at).toLocaleDateString()}
-                      </span>
-                    )}
+        {tab === "files" && (
+          <div>
+            {files.length === 0 && <p className="empty-state">No files yet.</p>}
+            {files.map((f) => (
+              <div key={f.id} className="item-row" style={{ display: "block" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div className="item-main">
+                    <a href={`/i/${f.id}`} className="item-title" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                      <IconFile size={14} /> {f.name}
+                    </a>
+                    <div className="item-sub" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                      <IconClock size={12} />
+                      {formatSize(f.size)} &middot; {new Date(f.created_at).toLocaleDateString()}
+                      {f.expires_at && (
+                        <span style={{ color: new Date(f.expires_at) < new Date() ? "var(--danger)" : "var(--star)" }}>
+                          &middot; expires {new Date(f.expires_at).toLocaleDateString()}
+                        </span>
+                      )}
+                    </div>
                   </div>
-                </div>
-                <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0, marginLeft: 12 }}>
-                  <button onClick={() => deleteFile(f.id)} style={{ background: "none", border: "none", color: "#c00", cursor: "pointer", fontSize: 13 }}>
-                    delete
+                  <button onClick={() => deleteFile(f.id)} className="btn btn-sm btn-danger" style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                    <IconTrash size={13} /> delete
                   </button>
                 </div>
+                <SharePanel fileId={f.id} fileName={f.name} />
               </div>
-              <SharePanel fileId={f.id} fileName={f.name} />
-            </div>
-          ))}
-        </div>
-      )}
+            ))}
+          </div>
+        )}
 
-      {tab === "keys" && (
-        <div>
-          <form onSubmit={createKey} style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-            <input
-              placeholder="key name (optional)"
-              value={newKeyName}
-              onChange={(e) => setNewKeyName(e.target.value)}
-              style={{ flex: 1, padding: 8, borderRadius: 4, border: "1px solid #ccc", fontSize: 14 }}
-            />
-            <button type="submit" style={{ padding: "8px 16px", background: "#111", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 14 }}>
-              Create
-            </button>
-          </form>
+        {tab === "keys" && (
+          <div>
+            <form onSubmit={createKey} className="form-row">
+              <input
+                placeholder="key name (optional)"
+                value={newKeyName}
+                onChange={(e) => setNewKeyName(e.target.value)}
+                aria-label="Key name"
+                className="input"
+              />
+              <button type="submit" className="btn btn-primary">Create</button>
+            </form>
 
-          {newKeyValue && (
-            <div style={{ padding: 12, background: "#e8ffe8", borderRadius: 8, marginBottom: 16 }}>
-              <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 4 }}>Your new API key (copy it now, it won&apos;t be shown again):</div>
-              <code style={{ display: "block", padding: 8, background: "#fff", borderRadius: 4, wordBreak: "break-all", fontSize: 13 }}>
-                {newKeyValue}
-              </code>
-              <button onClick={() => { navigator.clipboard.writeText(newKeyValue); }} style={{ marginTop: 8, background: "none", border: "1px solid #ccc", borderRadius: 4, padding: "4px 8px", cursor: "pointer", fontSize: 12 }}>
-                copy
-              </button>
-            </div>
-          )}
+            {newKeyValue && (
+              <div className="notice" style={{ background: "#ecfdf5" }}>
+                <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 4 }}>Your new API key (copy it now, it won&apos;t be shown again):</div>
+                <code style={{ display: "block", padding: 8, background: "#fff", borderRadius: 4, wordBreak: "break-all", fontSize: 13 }}>
+                  {newKeyValue}
+                </code>
+                <button onClick={copyKey} className="btn btn-sm" style={{ marginTop: 8, display: "inline-flex", alignItems: "center", gap: 4 }}>
+                  <IconCopy size={13} /> {copiedKey ? "copied" : "copy"}
+                </button>
+              </div>
+            )}
 
-          {keys.length === 0 && <p style={{ color: "#999" }}>No API keys.</p>}
-          {keys.map((k) => (
-            <div key={k.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: "1px solid #eee" }}>
-              <div>
-                <div style={{ fontSize: 14 }}>{k.name || "(unnamed)"}</div>
-                <div style={{ fontSize: 12, color: "#666" }}>
-                  created {new Date(k.created_at).toLocaleDateString()}
-                  {k.last_used_at && ` \u00b7 last used ${new Date(k.last_used_at).toLocaleDateString()}`}
+            {keys.length === 0 && <p className="empty-state">No API keys.</p>}
+            {keys.map((k) => (
+              <div key={k.id} className="item-row">
+                <div className="item-main">
+                  <div style={{ fontSize: 14 }}>{k.name || "(unnamed)"}</div>
+                  <div className="item-sub">
+                    created {new Date(k.created_at).toLocaleDateString()}
+                    {k.last_used_at && ` \u00b7 last used ${new Date(k.last_used_at).toLocaleDateString()}`}
+                  </div>
                 </div>
+                <button onClick={() => deleteKey(k.id)} className="btn btn-sm btn-danger" style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                  <IconTrash size={13} /> revoke
+                </button>
               </div>
-              <button onClick={() => deleteKey(k.id)} style={{ background: "none", border: "none", color: "#c00", cursor: "pointer", fontSize: 13 }}>
-                revoke
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-    </main>
+            ))}
+          </div>
+        )}
+      </main>
+    </>
   );
 }

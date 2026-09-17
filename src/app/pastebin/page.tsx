@@ -2,6 +2,9 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { SiteNav } from "@/components/site-nav";
+import { IconHeart, IconStar, IconComment, IconPlus, IconEye } from "@/components/icons";
+import { CodeBlock } from "@/components/code-block";
 
 type Paste = {
   id: string; title: string; snippet: string; language: string; author: string;
@@ -42,42 +45,58 @@ export default function PastebinPage() {
   }
 
   return (
-    <main style={{ maxWidth: 720, margin: "6vh auto", padding: 24, fontFamily: "system-ui, sans-serif" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-        <h1 style={{ fontSize: 24, margin: 0 }}>Pastebin</h1>
-        <Link href="/paste/new" style={{ padding: "8px 16px", background: "#111", color: "#fff", textDecoration: "none", borderRadius: 6, fontSize: 14 }}>
-          New Paste
-        </Link>
-      </div>
-
-      {error && <p style={{ color: "#c00" }}>{error}</p>}
-      {pastes.length === 0 && !error && <p style={{ color: "#999" }}>No pastes yet.</p>}
-
-      {pastes.map((p) => (
-        <div key={p.id} style={{ border: "1px solid #e5e5e5", borderRadius: 8, padding: 14, marginBottom: 12 }}>
-          <a href={`/paste/${p.id}`} style={{ fontWeight: 600, fontSize: 15, color: "#111", textDecoration: "none" }}>
-            {p.title}
-          </a>
-          <div style={{ fontSize: 12, color: "#888", margin: "4px 0" }}>
-            {p.author} &middot; {timeAgo(p.created_at)} &middot; {p.language}
+    <>
+      <SiteNav showNewPaste />
+      <main className="container">
+        <div className="page-header">
+          <div>
+            <h1 className="page-title">Pastebin</h1>
+            <p className="muted" style={{ margin: "6px 0 0", fontSize: 14 }}>public pastes — copy, comment, like, star</p>
           </div>
-          {p.snippet && (
-            <pre style={{ fontSize: 12, background: "#f7f7f7", padding: 10, borderRadius: 6, whiteSpace: "pre-wrap", wordBreak: "break-word", margin: "8px 0" }}>
-              {p.snippet}
-            </pre>
-          )}
-          <div style={{ display: "flex", gap: 12, fontSize: 13, color: "#666" }}>
-            <button onClick={() => toggle("like", p.id)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13, color: p.liked ? "#e0245e" : "#666" }}>
-              like {p.like_count}
-            </button>
-            <button onClick={() => toggle("star", p.id)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13, color: p.starred ? "#e8a33d" : "#666" }}>
-              star {p.star_count}
-            </button>
-            <span>comments {p.comment_count}</span>
-            <a href={`/paste/${p.id}`} style={{ color: "#666" }}>view</a>
-          </div>
+          <Link href="/paste/new" className="btn btn-primary" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <IconPlus size={15} /> New Paste
+          </Link>
         </div>
-      ))}
-    </main>
+
+        {error && <p className="error-text">{error}</p>}
+        {pastes.length === 0 && !error && <p className="empty-state">No pastes yet.</p>}
+
+        {pastes.map((p) => (
+          <div key={p.id} className="card">
+            <Link href={`/paste/${p.id}`} className="card-title" style={{ textDecoration: "none" }}>
+              {p.title}
+            </Link>
+            <div className="card-meta">
+              {p.author} &middot; {timeAgo(p.created_at)} &middot; <span className="badge">{p.language}</span>
+            </div>
+            {p.snippet && <CodeBlock code={p.snippet} language={p.language} className="code-feed" />}
+            <div className="card-actions">
+              <button
+                type="button"
+                onClick={() => toggle("like", p.id)}
+                className="link-btn"
+                style={{ color: p.liked ? "var(--like)" : undefined, display: "inline-flex", alignItems: "center", gap: 4, textDecoration: "none" }}
+              >
+                <IconHeart size={14} filled={p.liked} /> {p.like_count}
+              </button>
+              <button
+                type="button"
+                onClick={() => toggle("star", p.id)}
+                className="link-btn"
+                style={{ color: p.starred ? "var(--star)" : undefined, display: "inline-flex", alignItems: "center", gap: 4, textDecoration: "none" }}
+              >
+                <IconStar size={14} filled={p.starred} /> {p.star_count}
+              </button>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                <IconComment size={14} /> {p.comment_count}
+              </span>
+              <Link href={`/paste/${p.id}`} style={{ display: "inline-flex", alignItems: "center", gap: 4, textDecoration: "none" }}>
+                <IconEye size={14} /> view
+              </Link>
+            </div>
+          </div>
+        ))}
+      </main>
+    </>
   );
 }

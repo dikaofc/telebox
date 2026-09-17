@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { SiteNav } from "@/components/site-nav";
+import { IconUser, IconKey, IconImage, IconCheck } from "@/components/icons";
 
 type Profile = { id: number; email: string; name: string; avatar_url: string | null };
 
@@ -62,49 +64,69 @@ export default function ProfilePage() {
     else setAvatarMsg(d.error ?? "avatar upload failed");
   }
 
-  if (auth === "loading") return <main style={{ maxWidth: 560, margin: "10vh auto", padding: 24, fontFamily: "system-ui, sans-serif" }}>Loading...</main>;
-  if (auth === "anon") return <main style={{ maxWidth: 560, margin: "10vh auto", padding: 24, fontFamily: "system-ui, sans-serif" }}><p style={{ color: "#c00" }}>Login to edit your profile.</p> <Link href="/" style={{ color: "#666" }}>back</Link></main>;
+  if (auth === "loading") {
+    return (<><SiteNav /><main className="container"><p className="faint">Loading...</p></main></>);
+  }
+  if (auth === "anon") {
+    return (
+      <>
+        <SiteNav />
+        <main className="container" style={{ textAlign: "center" }}>
+          <p className="error-text">Login to edit your profile.</p>
+          <Link href="/" className="btn btn-sm">back</Link>
+        </main>
+      </>
+    );
+  }
 
   return (
-    <main style={{ maxWidth: 560, margin: "8vh auto", padding: 24, fontFamily: "system-ui, sans-serif" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
-        <h1 style={{ fontSize: 24, margin: 0 }}>Profile</h1>
-        <Link href="/" style={{ fontSize: 13, color: "#666" }}>back</Link>
-      </div>
-
-      <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 24 }}>
-        {avatarUrl
-          ? (
-            // eslint-disable-next-line @next/next/no-img-element -- dynamic avatar route, no optimization
-            <img src={avatarUrl} alt="avatar" style={{ width: 72, height: 72, borderRadius: "50%", objectFit: "cover", border: "1px solid #ddd" }} />
-          )
-          : <div style={{ width: 72, height: 72, borderRadius: "50%", background: "#e5e5e5", display: "flex", alignItems: "center", justifyContent: "center", color: "#888", fontSize: 28 }}>{profile?.email[0].toUpperCase()}</div>}
-        <div>
-          <div style={{ fontSize: 16, fontWeight: 600 }}>{profile?.name || profile?.email}</div>
-          <div style={{ fontSize: 13, color: "#888" }}>{profile?.email}</div>
+    <>
+      <SiteNav />
+      <main className="container container-narrow">
+        <div className="page-header">
+          <h1 className="page-title">Profile</h1>
         </div>
-      </div>
 
-      <h2 style={{ fontSize: 16, margin: "0 0 10px" }}>Display name</h2>
-      <form onSubmit={saveName} style={{ display: "flex", gap: 8, marginBottom: 28 }}>
-        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="your name" maxLength={60} style={{ flex: 1, padding: 10, borderRadius: 6, border: "1px solid #ccc", fontSize: 14 }} />
-        <button type="submit" style={{ padding: "8px 16px", background: "#111", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 14 }}>Save</button>
-      </form>
-      {nameMsg && <p style={{ color: "#666", fontSize: 13, marginTop: -16, marginBottom: 20 }}>{nameMsg}</p>}
+        <div className="avatar-row">
+          {avatarUrl
+            ? (
+              // eslint-disable-next-line @next/next/no-img-element -- dynamic avatar route
+              <img src={avatarUrl} alt="avatar" className="avatar" />
+            )
+            : <div className="avatar-placeholder"><IconUser size={30} /></div>}
+          <div>
+            <div className="profile-identity-name">{profile?.name || profile?.email}</div>
+            <div className="profile-identity-email">{profile?.email}</div>
+          </div>
+        </div>
 
-      <h2 style={{ fontSize: 16, margin: "0 0 10px" }}>Profile photo</h2>
-      <div style={{ marginBottom: 28 }}>
-        <input type="file" accept="image/jpeg,image/png,image/webp" onChange={uploadAvatar} style={{ fontSize: 13 }} />
-        {avatarMsg && <p style={{ color: "#666", fontSize: 13, marginTop: 8 }}>{avatarMsg}</p>}
-      </div>
+        <h2 className="section-title">Display name</h2>
+        <form onSubmit={saveName} className="form-row" style={{ marginBottom: 24 }}>
+          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="your name" maxLength={60} className="input" aria-label="Display name" />
+          <button type="submit" className="btn btn-primary">Save</button>
+        </form>
+        {nameMsg && <p className="muted" style={{ fontSize: 13, marginTop: -16, marginBottom: 20 }}>{nameMsg}</p>}
 
-      <h2 style={{ fontSize: 16, margin: "0 0 10px" }}>Change password</h2>
-      <form onSubmit={savePassword} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        <input type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} placeholder="current password" required style={{ padding: 10, borderRadius: 6, border: "1px solid #ccc", fontSize: 14 }} />
-        <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="new password (min 8 chars)" required minLength={8} style={{ padding: 10, borderRadius: 6, border: "1px solid #ccc", fontSize: 14 }} />
-        <button type="submit" style={{ alignSelf: "flex-start", padding: "8px 16px", background: "#111", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 14 }}>Update</button>
-      </form>
-      {pwMsg && <p style={{ color: "#666", fontSize: 13, marginTop: 8 }}>{pwMsg}</p>}
-    </main>
+        <h2 className="section-title" style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <IconImage size={15} /> Profile photo
+        </h2>
+        <div style={{ marginBottom: 28 }}>
+          <input type="file" accept="image/jpeg,image/png,image/webp" onChange={uploadAvatar} className="input" style={{ maxWidth: "100%" }} aria-label="Profile photo" />
+          {avatarMsg && <p className="muted" style={{ fontSize: 13, marginTop: 8 }}>{avatarMsg}</p>}
+        </div>
+
+        <h2 className="section-title" style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <IconKey size={15} /> Change password
+        </h2>
+        <form onSubmit={savePassword} className="form-stack" style={{ maxWidth: 360 }}>
+          <input type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} placeholder="current password" required className="input" aria-label="Current password" />
+          <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="new password (min 8 chars)" required minLength={8} className="input" aria-label="New password" />
+          <button type="submit" className="btn btn-primary" style={{ alignSelf: "flex-start", display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <IconCheck size={14} /> Update
+          </button>
+        </form>
+        {pwMsg && <p className="muted" style={{ fontSize: 13, marginTop: 8 }}>{pwMsg}</p>}
+      </main>
+    </>
   );
 }
