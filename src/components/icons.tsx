@@ -150,6 +150,13 @@ export const IconX = (props: { size?: number }) => (
   </Icon>
 );
 
+export const IconPencil = (props: { size?: number }) => (
+  <Icon {...props}>
+    <path d="M12 20h9" />
+    <path d="M16.5 15l-8-8L3 11l1.5 7.5L12 20l2.5-3.5" />
+  </Icon>
+);
+
 export const IconArrowLeft = (props: { size?: number }) => (
   <Icon {...props}>
     <line x1="19" y1="12" x2="5" y2="12" />

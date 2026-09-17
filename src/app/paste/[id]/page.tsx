@@ -15,7 +15,7 @@ type PasteRow = {
   id: string; title: string; content: string; language: string;
   created_at: number; author_name: string;
 };
-type CommentRow = { id: string; author_name: string; body: string; created_at: number };
+type CommentRow = { id: string; author_name: string; body: string; created_at: number; user_id?: number };
 
 /** server-side actor: session user if logged in, else IP hash (mirrors API). */
 async function serverActor(): Promise<string> {
@@ -87,9 +87,12 @@ export default async function PastePage({ params }: { params: Promise<{ id: stri
           initial={comments.map((c) => ({
             id: c.id,
             author: c.author_name || "anonymous",
+            avatar_url: null,
             body: c.body,
             created_at: new Date(c.created_at).toISOString(),
+            user_id: c.user_id ?? 0,
           }))}
+          currentUserId={await getSessionUserId()}
         />
       </main>
     </>
