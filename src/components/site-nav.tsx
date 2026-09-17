@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { IconBox, IconPaste, IconFile, IconUser, IconLogout, IconLogin, IconPlus } from "@/components/icons";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 type Auth = { logged_in: boolean; email?: string };
 
@@ -39,6 +40,7 @@ export function SiteNav() {
           <IconPlus size={14} />
           new paste
         </Link>
+        <ThemeToggle />
         {auth?.logged_in ? (
           <>
             <Link href="/my" className="nav-link" style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
