@@ -56,8 +56,7 @@ type UploadSession = {
   sha256: string; total_parts: number; expires_at: number | null; created_at: number;
 };
 
-async function initUpload(req: NextRequest, userId: number) {
-  const body = await req.json().catch(() => null);
+async function initUpload(req: NextRequest, userId: number, body: Record<string, unknown> | null) {
   const meta = validateInitMeta({ name: body?.name, mime: body?.mime, size: body?.size, sha256: body?.sha256 });
   if (!meta.ok) return invalid("invalid upload metadata");
   const { name, mime, size, sha256 } = meta.value;
@@ -144,8 +143,7 @@ async function uploadChunk(req: NextRequest, userId: number) {
   return NextResponse.json({ ok: true, partIndex, hash });
 }
 
-async function completeUpload(req: NextRequest, userId: number, reqUrl: string) {
-  const body = await req.json().catch(() => null);
+async function completeUpload(req: NextRequest, userId: number, reqUrl: string, body: Record<string, unknown> | null) {
   const uploadId = typeof body?.uploadId === "string" ? body.uploadId : "";
 
   // Idempotent retry: a first attempt may have succeeded while its response
@@ -300,9 +298,12 @@ export async function POST(req: NextRequest) {
   // JSON must not fall through to formData() — that used to throw and answer
   // a 500 HTML page instead of a clean JSON error.
   if (contentType.includes("application/json")) {
-    const body = await req.json().catch(() => null);
-    if (body?.action === "init") return initUpload(req, userId);
-    if (body?.action === "complete") return completeUpload(req, userId, req.url);
+    // Parse the JSON body exactly once and pass it down — a Request body is
+    // a stream and cannot be read twice (init/complete used to re-read it,
+    // get null, and answer "invalid upload metadata").
+    const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
+    if (body?.action === "init") return initUpload(req, userId, body);
+    if (body?.action === "complete") return completeUpload(req, userId, req.url, body);
     return invalid("unknown action — expected 'init' or 'complete'");
   }
 
