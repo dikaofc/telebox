@@ -45,7 +45,7 @@ Open http://localhost:3000
 - Accounts, ownership, delete (soft-deletes the row **and** removes the Telegram blob)
 - API keys (`tb_` prefix) for CLI access
 - Expiration TTL (1 hour to 30 days), guaranteed by a janitor (daily cron + self-heal on access)
-- Magic-byte validation (extension spoof protection)
+- All file types accepted (exe, apk, iso, …); unsafe types (html/js/svg/wasm) are always forced to download so they can never execute on the site — empty files are the only rejection
 - Rate limiting on upload, signup, login, pastes, comments, likes/stars, avatar uploads, API-key creation
 - Public pastebin: create pastes, comment, edit/delete own comments, like, star — reactions are per-person (account or IP-derived for anonymous)
 - Profile page: display name, password change, profile photo (stored in Telegram, served at `/avatar/:id`)
@@ -89,6 +89,7 @@ Limits:
 | Limit | Value | Why |
 |---|---|---|
 | Max file size | 50 MB | Telegram Bot API `sendDocument` cap (cloud) |
+| File types | all accepted | executables/archives download-only (never rendered inline); no type-based rejection |
 | Direct (single-request) upload | 20 MB | Telegram `getFile` cannot download files > 20 MB — larger single blobs would be stored but unservable |
 | Chunk size | 3 MiB | Stays under the 4.5 MB platform body cap with multipart overhead |
 | Abandoned session lifetime | 24 h | Janitored (Telegram parts + staging rows deleted) |

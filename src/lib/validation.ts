@@ -1,53 +1,19 @@
-const ALLOWED_MIME_TYPES = new Set([
-  "image/jpeg",
-  "image/png",
-  "image/gif",
-  "image/webp",
-  "image/avif",
-  "image/svg+xml",
-  "application/pdf",
-  "text/plain",
-  "text/csv",
-  "application/json",
-  "application/zip",
-  "application/x-7z-compressed",
-  "application/x-tar",
-  "application/gzip",
-  "video/mp4",
-  "video/webm",
-  "video/quicktime",
-  "audio/mpeg",
-  "audio/wav",
-  "audio/ogg",
-]);
+/**
+ * File validation. Policy (v2): ALL file types are accepted — the allowlist
+ * era is over. Executables, archives, documents, anything. Two non-negotiable
+ * rules remain:
+ *
+ *  1. Empty files are rejected (nothing to store, breaks size invariants).
+ *  2. Unsafe types are never rendered inline: `src/lib/raw-serve.ts` forces
+ *     `Content-Disposition: attachment` for active-content mimes (html, js,
+ *     svg, wasm, …) so uploaded code can never execute on this origin.
+ *
+ * The magic-byte table below is kept for detection/tests, not rejection —
+ * client `Content-Type` is still never trusted for anything security-relevant.
+ */
 
-const EXTENSION_MAP: Record<string, string> = {
-  ".jpg": "image/jpeg",
-  ".jpeg": "image/jpeg",
-  ".png": "image/png",
-  ".gif": "image/gif",
-  ".webp": "image/webp",
-  ".avif": "image/avif",
-  ".svg": "image/svg+xml",
-  ".pdf": "application/pdf",
-  ".txt": "text/plain",
-  ".csv": "text/csv",
-  ".json": "application/json",
-  ".zip": "application/zip",
-  ".7z": "application/x-7z-compressed",
-  ".tar": "application/x-tar",
-  ".gz": "application/gzip",
-  ".mp4": "video/mp4",
-  ".webm": "video/webm",
-  ".mov": "video/quicktime",
-  ".mp3": "audio/mpeg",
-  ".wav": "audio/wav",
-  ".ogg": "audio/ogg",
-};
-
-// Magic-byte signatures: [offset, bytes]. Checked against the claimed MIME.
-// Text types (txt/csv/json/svg) skip binary checks — content is not executable
-// on its own, and SVG is always served as attachment (see raw route).
+// Magic-byte signatures: [offset, bytes]. Used to *detect* a file's real type;
+// a mismatch with the claimed mime is no longer a rejection.
 const MAGIC: Record<string, [number, number[]][]> = {
   "image/png": [[0, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]]],
   "image/jpeg": [[0, [0xff, 0xd8, 0xff]]],
@@ -57,6 +23,8 @@ const MAGIC: Record<string, [number, number[]][]> = {
   "application/pdf": [[0, [0x25, 0x50, 0x44, 0x46]]], // %PDF
   "application/zip": [[0, [0x50, 0x4b, 0x03, 0x04]]], // PK..
   "application/x-7z-compressed": [[0, [0x37, 0x7a, 0xbc, 0xaf, 0x27, 0x1c]]],
+  "application/vnd.rar": [[0, [0x52, 0x61, 0x72, 0x21]]], // Rar!
+  "application/x-msdownload": [[0, [0x4d, 0x5a]]], // MZ (exe/dll/sys)
   "application/gzip": [[0, [0x1f, 0x8b]]],
   "application/x-tar": [[257, [0x75, 0x73, 0x74, 0x61, 0x72]]], // ustar
   "video/mp4": [[4, [0x66, 0x74, 0x79, 0x70]]], // ....ftyp
@@ -77,24 +45,30 @@ export function matchesMagic(mime: string, head: Uint8Array): boolean {
   );
 }
 
+/**
+ * Best-effort real-type detection from a byte head. Returns null when no
+ * known signature matches. Ambiguous signatures (mp4/mov share ftyp) resolve
+ * to the first table hit — callers only use this when the client sent no
+ * usable mime.
+ */
+export function detectMime(head: Uint8Array): string | null {
+  if (head.length >= 2 && head[0] === 0xff && (head[1] & 0xe0) === 0xe0) return "audio/mpeg";
+  for (const [mime, sigs] of Object.entries(MAGIC)) {
+    if (mime === "video/quicktime") continue; // ftyp already matched as mp4
+    if (sigs.every(([off, bytes]) => head.length >= off + bytes.length && bytes.every((b, i) => head[off + i] === b))) {
+      return mime;
+    }
+  }
+  return null;
+}
+
+/** Size sanity only — every mime/extension is accepted. */
 export function validateFileMeta(
-  filename: string,
-  mime: string,
+  _filename: string,
+  _mime: string,
   size: number
 ): { valid: boolean; error?: string } {
   if (!Number.isSafeInteger(size) || size <= 0) return { valid: false, error: "invalid file size" };
-
-  const ext = "." + filename.split(".").pop()?.toLowerCase();
-  const expectedMime = EXTENSION_MAP[ext];
-
-  if (!ALLOWED_MIME_TYPES.has(mime)) {
-    return { valid: false, error: `unsupported mime type: ${mime}` };
-  }
-
-  if (expectedMime && expectedMime !== mime) {
-    return { valid: false, error: `extension ${ext} does not match mime ${mime}` };
-  }
-
   return { valid: true };
 }
 
@@ -102,15 +76,10 @@ export function validateFile(
   filename: string,
   mime: string,
   size: number,
-  head?: Uint8Array
+  // `head` kept in the signature for call-site compatibility; type-based
+  // rejection no longer exists (detection is handled by detectMime).
+  _head?: Uint8Array
 ): { valid: boolean; error?: string } {
   if (size === 0) return { valid: false, error: "empty file" };
-  const meta = validateFileMeta(filename, mime, size);
-  if (!meta.valid) return meta;
-
-  if (head && !matchesMagic(mime, head)) {
-    return { valid: false, error: `content does not match mime ${mime}` };
-  }
-
-  return { valid: true };
+  return validateFileMeta(filename, mime, size);
 }

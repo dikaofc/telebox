@@ -13,7 +13,7 @@ This document describes telebox's threat model and the concrete controls in the 
 
 ## Uploads & stored content
 
-- **MIME allowlist + magic bytes** — `src/lib/validation.ts`: extension↔mime consistency plus signature sniffing of the first 512 bytes. Executable formats (`.exe`, `.bat`, `.sh`, …) are not in the allowlist. Client-declared Content-Type is never trusted.
+- **All types accepted, unsafe types neutralized** — `src/lib/validation.ts` rejects only empty files; every mime/extension is allowed. Client `Content-Type` is never trusted: `detectMime` sniffs real type from magic bytes when the browser sends `application/octet-stream`. `src/lib/raw-serve.ts` forces `Content-Disposition: attachment` for active-content mimes (`UNSAFE_INLINE_MIMES`: html, js, svg, wasm, xml, exe, php, sh, …), so uploaded code can never render or execute on this origin — stored-XSS via file serving is closed by construction, not by filtering.
 - **Chunked integrity** — `src/lib/multipart.ts` + upload route: non-final parts must be exactly 3 MiB; the client's SHA-256 claim is verified at `complete` by re-downloading and hashing every stored part (`hashStoredParts` in `raw-serve.ts`). Mismatched staging is destroyed, so dedup metadata never reflects bytes that were not verified.
 - **Owner-scoped dedup** — identical bytes uploaded by a different account never leak the first account's link (queries filter on `user_id`).
 - **SVG** — served only as `attachment` (never inline), and the preview page shows source text, never renders it, neutering script-in-SVG.

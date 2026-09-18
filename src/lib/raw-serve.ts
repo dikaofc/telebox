@@ -15,6 +15,29 @@ export function isExpired(row: RawRow): boolean {
   return row.expires_at !== null && Date.now() > row.expires_at;
 }
 
+/**
+ * Mimes that browsers execute when rendered inline. Always served as
+ * `attachment` regardless of the `dl` parameter (or the extension the file
+ * was uploaded with).
+ */
+const UNSAFE_INLINE_MIMES = new Set([
+  "text/html",
+  "application/xhtml+xml",
+  "text/javascript",
+  "application/javascript",
+  "application/x-javascript",
+  "module",
+  "image/svg+xml",
+  "application/wasm",
+  "text/xml",
+  "application/xml",
+  "application/x-msdownload",
+  "application/x-msi",
+  "application/x-sh",
+  "application/x-httpd-php",
+  "text/x-php",
+]);
+
 type ByteRange = { start: number; end: number };
 
 /**
@@ -186,8 +209,12 @@ export async function buildRawResponse(
     body = upstream.body;
   }
 
-  // SVG can carry scripts — never render inline, always force download.
-  const forceDownload = row.mime === "image/svg+xml";
+  // Active-content types (html, js, svg, wasm, …) can execute when rendered
+  // by the browser. Since all file types are accepted, these are always
+  // forced to download — they can never render on this origin, which keeps
+  // stored-XSS off the site. Previewable media (image/video/audio/text/pdf)
+  // stay inline so the preview pages keep working.
+  const forceDownload = UNSAFE_INLINE_MIMES.has(row.mime);
   const fileName = prettyName ?? row.name;
   const disposition = (dl || forceDownload)
     ? `attachment; filename*=UTF-8''${encodeURIComponent(fileName)}`

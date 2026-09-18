@@ -73,14 +73,9 @@ describe("validateInitMeta", () => {
 });
 
 describe("validateFileMeta", () => {
-  it("accepts allowed mime with matching extension", () => {
+  it("accepts any mime with a positive size (all-types policy)", () => {
     assert.equal(validateFileMeta("a.zip", "application/zip", 10).valid, true);
-  });
-  it("rejects disallowed mime before any bytes move", () => {
-    assert.equal(validateFileMeta("a.exe", "application/x-msdownload", 10).valid, false);
-  });
-  it("rejects extension spoof", () => {
-    assert.equal(validateFileMeta("a.zip", "image/png", 10).valid, false);
+    assert.equal(validateFileMeta("a.exe", "application/x-msdownload", 10).valid, true);
   });
   it("rejects non-positive sizes", () => {
     assert.equal(validateFileMeta("a.txt", "text/plain", 0).valid, false);

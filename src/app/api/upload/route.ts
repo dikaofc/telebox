@@ -3,7 +3,7 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import db from "@/lib/db";
 import { newId } from "@/lib/id";
 import { deleteMessage, sendDocument } from "@/lib/telegram";
-import { validateFile, validateFileMeta } from "@/lib/validation";
+import { validateFile, validateFileMeta, detectMime } from "@/lib/validation";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { clientIp, resolveUserId } from "@/lib/session";
 import { rawUrl } from "@/lib/raw-serve";
@@ -61,9 +61,11 @@ async function initUpload(req: NextRequest, userId: number, body: Record<string,
   if (!meta.ok) return invalid("invalid upload metadata");
   const { name, mime, size, sha256 } = meta.value;
 
-  // Extension/mime allowlist up front so a disallowed file fails before any
-  // chunk (and any Telegram message) is wasted. Magic bytes are checked on
-  // part 0 arrival; the full hash is verified against stored bytes at complete.
+  // Size sanity up front so a broken upload fails before any chunk (and any
+  // Telegram message) is wasted. All types are accepted; unsafe types are
+  // neutralized at serving time (forced attachment, see raw-serve.ts). Magic
+  // bytes are checked on part 0 arrival; the full hash is verified against
+  // stored bytes at complete.
   const allowed = validateFileMeta(name, mime, size);
   if (!allowed.valid) return invalid(`file: ${allowed.error}`, 415);
 
@@ -245,7 +247,15 @@ async function handleOneFile(file: File, userId: number, reqUrl: string, ttl: nu
     return { error: `${file.name}: too large for direct upload (max 20 MB — the API client chunks automatically)`, status: 413 as const };
   }
   const buf = new Uint8Array(await file.arrayBuffer());
-  const v = validateFile(file.name, file.type || "application/octet-stream", file.size, buf.subarray(0, 512));
+  const claimed = file.type || "application/octet-stream";
+  // Empty files are the only hard rejection. When the browser sends no useful
+  // mime, sniff the real type from the magic bytes so stored metadata (and
+  // serving behavior) reflect the actual content.
+  let mime = claimed;
+  if (mime === "application/octet-stream") {
+    mime = detectMime(buf.subarray(0, 512)) ?? mime;
+  }
+  const v = validateFile(file.name, mime, file.size);
   if (!v.valid) return { error: `${file.name}: ${v.error}`, status: 415 as const };
   const sha256 = createHash("sha256").update(buf).digest("hex");
 
@@ -271,7 +281,6 @@ async function handleOneFile(file: File, userId: number, reqUrl: string, ttl: nu
 
   const id = newId();
   const name = file.name || id;
-  const mime = file.type || "application/octet-stream";
   const sent = await sendDocument(new Blob([buf], { type: mime }), name);
   const expiresAt = ttl ? Date.now() + ttl * 1000 : null;
 
