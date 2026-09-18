@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
   }
 
   const buf = new Uint8Array(await file.arrayBuffer());
-  const v = validateFile(file.name, file.type || "application/octet-stream", file.size, buf.subarray(0, 512));
+  const v = validateFile(file.name, file.type || "application/octet-stream", file.size);
   if (!v.valid) return NextResponse.json({ error: `avatar: ${v.error}` }, { status: 415 });
 
   const sent = await sendDocument(new Blob([buf], { type: file.type }), "avatar");

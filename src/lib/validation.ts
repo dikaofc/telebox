@@ -75,10 +75,7 @@ export function validateFileMeta(
 export function validateFile(
   filename: string,
   mime: string,
-  size: number,
-  // `head` kept in the signature for call-site compatibility; type-based
-  // rejection no longer exists (detection is handled by detectMime).
-  _head?: Uint8Array
+  size: number
 ): { valid: boolean; error?: string } {
   if (size === 0) return { valid: false, error: "empty file" };
   return validateFileMeta(filename, mime, size);

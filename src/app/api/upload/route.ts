@@ -125,7 +125,7 @@ async function uploadChunk(req: NextRequest, userId: number) {
   }
 
   if (partIndex === 0) {
-    const v = validateFile(session.name, session.mime, session.size, bytes.subarray(0, 512));
+    const v = validateFile(session.name, session.mime, session.size);
     if (!v.valid) return invalid(`file: ${v.error}`, 415);
   }
 
