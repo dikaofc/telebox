@@ -9,7 +9,6 @@ import { clientIp, resolveUserId } from "@/lib/session";
 import { rawUrl } from "@/lib/raw-serve";
 import { purgeExpired } from "@/lib/purge";
 import { cleanupAbandonedUpload } from "@/lib/file-storage";
-import { isFileLike } from "@/lib/upload-file";
 import {
   CHUNK_BYTES,
   MAX_SINGLE_FILE_BYTES,
@@ -96,18 +95,28 @@ async function initUpload(req: NextRequest, userId: number, body: Record<string,
 }
 
 async function uploadChunk(req: NextRequest, userId: number) {
-  const form = await req.formData().catch(() => null);
-  if (!form) return invalid("invalid upload chunk: could not parse form data");
-  const uploadId = form.get("uploadId");
-  const partIndexRaw = form.get("partIndex");
-  const partIndex = Number(partIndexRaw);
-  const chunk = form.get("chunk");
-  if (typeof uploadId !== "string") return invalid(`invalid upload chunk: uploadId missing (got ${typeof uploadId})`);
-  if (!Number.isSafeInteger(partIndex) || partIndex < 0) {
-    return invalid(`invalid upload chunk: bad partIndex (got ${JSON.stringify(partIndexRaw)})`);
+  // Chunks are sent as a RAW BINARY body with metadata in the query string
+  // (POST /api/upload?uploadId=...&partIndex=N). The previous multipart-form
+  // transport died in req.formData() on multi-MB bodies ("could not parse
+  // form data") — a raw body has no parser to fail: arrayBuffer() is a plain
+  // stream read.
+  const uploadId = req.nextUrl.searchParams.get("uploadId");
+  const partIndex = Number(req.nextUrl.searchParams.get("partIndex"));
+  if (typeof uploadId !== "string" || !uploadId) {
+    return invalid("invalid upload chunk: uploadId query param missing");
   }
-  if (!isFileLike(chunk)) return invalid(`invalid upload chunk: chunk field missing or not a file (got ${chunk === null ? "null" : typeof chunk})`);
+  if (!Number.isSafeInteger(partIndex) || partIndex < 0) {
+    return invalid(`invalid upload chunk: bad partIndex query param (got ${JSON.stringify(req.nextUrl.searchParams.get("partIndex"))})`);
+  }
 
+  let bytes: Uint8Array<ArrayBuffer>;
+  try {
+    bytes = new Uint8Array(await req.arrayBuffer());
+  } catch (e) {
+    console.error("chunk body read failed", e);
+    return invalid("invalid upload chunk: could not read request body");
+  }
+  const chunkSize = bytes.byteLength;
   const session = await db.get<UploadSession>(
     "SELECT id, user_id, name, mime, size, sha256, total_parts, expires_at, created_at FROM upload_sessions WHERE id = ?",
     uploadId
@@ -120,22 +129,21 @@ async function uploadChunk(req: NextRequest, userId: number) {
   if (partIndex >= session.total_parts) {
     return invalid(`invalid upload chunk: partIndex ${partIndex} beyond total_parts ${session.total_parts}`);
   }
-  if (chunk.size === 0) return invalid(`invalid upload chunk: chunk is 0 bytes for part ${partIndex} (client slice bug or empty read)`);
-  if (chunk.size > CHUNK_BYTES) return invalid(`invalid upload chunk: chunk is ${chunk.size} bytes, max ${CHUNK_BYTES}`);
+  if (chunkSize === 0) return invalid(`invalid upload chunk: chunk is 0 bytes for part ${partIndex} (client sent an empty body)`);
+  if (chunkSize > CHUNK_BYTES) return invalid(`invalid upload chunk: chunk is ${chunkSize} bytes, max ${CHUNK_BYTES}`);
   // Non-final parts must be exactly full: a short middle part would silently
   // shift every later byte. The final part carries the remainder.
   const expected = expectedPartSize(session.size, partIndex);
-  if (chunk.size !== expected) {
+  if (chunkSize !== expected) {
     return invalid(
-      `invalid upload chunk: part ${partIndex}/${session.total_parts - 1} is ${chunk.size} bytes, expected exactly ${expected} (file size ${session.size})`
+      `invalid upload chunk: part ${partIndex}/${session.total_parts - 1} is ${chunkSize} bytes, expected exactly ${expected} (file size ${session.size})`
     );
   }
 
-  const bytes = new Uint8Array(await chunk.arrayBuffer());
   const hash = createHash("sha256").update(bytes).digest("hex");
   const existing = await db.get<{ size: number }>("SELECT size FROM file_parts WHERE file_id = ? AND part_index = ?", uploadId, partIndex);
   if (existing) {
-    if (existing.size !== chunk.size) return invalid("chunk conflict", 409);
+    if (existing.size !== chunkSize) return invalid(`chunk conflict: part ${partIndex} already stored with ${existing.size} bytes, resent ${chunkSize}`, 409);
     return NextResponse.json({ ok: true, partIndex, alreadyUploaded: true });
   }
 
@@ -151,7 +159,7 @@ async function uploadChunk(req: NextRequest, userId: number) {
     await db.run(
       `INSERT INTO file_parts (file_id, part_index, size, tg_chat_id, tg_message_id, tg_file_id)
        VALUES (?, ?, ?, ?, ?, ?)`,
-      uploadId, partIndex, chunk.size, String(sent.chatId), sent.messageId, sent.fileId
+      uploadId, partIndex, chunkSize, String(sent.chatId), sent.messageId, sent.fileId
     );
   } catch (error) {
     await deleteMessage(String(sent.chatId), sent.messageId);
@@ -331,10 +339,12 @@ export async function POST(req: NextRequest) {
     return invalid("unknown action — expected 'init' or 'complete'");
   }
 
+  // Chunked parts arrive as a raw binary body with query-param metadata —
+  // detectable without touching (and without needing) a form parser.
+  if (req.nextUrl.searchParams.has("uploadId")) return uploadChunk(req, userId);
+
   const form = await req.formData().catch(() => null);
   if (!form) return invalid("expected multipart form data or JSON action");
-
-  if (form.has("uploadId")) return uploadChunk(req, userId);
 
   const files = form.getAll("file").filter((f): f is File => f instanceof File);
   if (files.length === 0) {

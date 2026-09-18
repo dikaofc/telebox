@@ -8,7 +8,10 @@ type Result = { id: string; url: string; name: string; size?: number; mime?: str
 type UploadResult = Result | { files: Result[] };
 type Auth = { logged_in: boolean; email?: string };
 const MAX_BROWSER_UPLOAD_BYTES = 50 * 1024 * 1024;
-const MAX_DIRECT_UPLOAD_BYTES = 3 * 1024 * 1024;
+// Direct single-request uploads only for small bodies: multipart form-data
+// parsing is the fragile path (it failed on multi-MB bodies), so anything
+// bigger goes through the raw-chunk protocol below.
+const MAX_DIRECT_UPLOAD_BYTES = 1 * 1024 * 1024;
 
 export default function Home() {
   const [auth, setAuth] = useState<Auth | null>(null);
@@ -101,11 +104,13 @@ export default function Home() {
       let lastError: string | null = null;
       for (let attempt = 1; attempt <= 3 && !sent; attempt++) {
         try {
-          const form = new FormData();
-          form.append("uploadId", initJson.uploadId);
-          form.append("partIndex", String(partIndex));
-          form.append("chunk", chunk, `${file.name}.part`);
-          const res = await fetch("/api/upload", { method: "POST", body: form });
+          // Raw binary transport: the chunk IS the body, metadata rides in
+          // the query string. No multipart parser involved, so there is no
+          // form parsing to fail on multi-MB bodies.
+          const res = await fetch(
+            `/api/upload?uploadId=${encodeURIComponent(initJson.uploadId)}&partIndex=${partIndex}`,
+            { method: "POST", body: chunk, headers: { "Content-Type": "application/octet-stream" } }
+          );
           const json = await res.json().catch(() => ({})) as { error?: string };
           if (!res.ok) throw new Error(json.error ?? `upload part failed (HTTP ${res.status})`);
           sent = true;
