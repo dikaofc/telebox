@@ -91,8 +91,8 @@ export function CommentSection({ pasteId, initial, currentUserId }: { pasteId: s
         <div key={c.id} className="item-row" style={{ display: "flex", alignItems: "flex-start" }}>
           {c.avatar_url
             // eslint-disable-next-line @next/next/no-img-element -- /avatar/* is a dynamic route, bypass Image optimization
-            ? <img src={c.avatar_url} alt="" className="avatar" style={{ width: 36, height: 36, marginRight: 10, flexShrink: 0 }} />
-            : <div className="avatar-placeholder" style={{ width: 36, height: 36, marginRight: 10, flexShrink: 0, fontSize: 16 }} />}
+            ? <img src={c.avatar_url} alt="" className="avatar-sm" loading="lazy" />
+            : <div className="avatar-sm-placeholder" />}
           <div className="item-main" style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div style={{ fontSize: 13, fontWeight: 500 }}>

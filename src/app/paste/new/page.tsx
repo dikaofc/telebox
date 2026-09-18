@@ -41,7 +41,7 @@ export default function NewPastePage() {
           <h1 className="page-title">New Paste</h1>
         </div>
 
-        <form onSubmit={submit} className="card" style={{ border: "none", padding: 0 }}>
+        <form onSubmit={submit}>
           <div className="form-row">
             <input
               value={title}
@@ -65,7 +65,7 @@ export default function NewPastePage() {
             className="textarea"
           />
           {error && <p className="error-text">{error}</p>}
-          <button type="submit" disabled={busy} className="btn btn-primary" style={{ marginTop: 12, display: "inline-flex", alignItems: "center", gap: 6 }}>
+          <button type="submit" disabled={busy} className="btn btn-primary" style={{ marginTop: 12 }}>
             <IconPlus size={15} /> {busy ? "Creating..." : "Create Paste"}
           </button>
         </form>

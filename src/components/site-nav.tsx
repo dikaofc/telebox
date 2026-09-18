@@ -9,8 +9,9 @@ import { ThemeToggle } from "@/components/theme-toggle";
 type Auth = { logged_in: boolean; email?: string };
 
 /**
- * Shared top navigation. Fetches auth state once; used by every page so the
- * header is consistent (and the email is never shown).
+ * Shared top navigation: sticky glass bar (blur + translucency), horizontal
+ * scroll on narrow screens, consistent hover/active states. Auth state is
+ * fetched once; the email is never shown.
  */
 export function SiteNav() {
   const [auth, setAuth] = useState<Auth | null>(null);
@@ -25,48 +26,50 @@ export function SiteNav() {
 
   return (
     <nav className="nav" aria-label="Main">
-      <Link href="/" className="nav-brand" style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <IconBox size={18} />
-        telebox
-      </Link>
-      <div className="nav-links" style={{ display: "flex", gap: 6 }}>
-        <button type="button" className="btn btn-sm" onClick={() => router.push("/")}>
-          home
-        </button>
-        <button type="button" className="btn btn-sm" onClick={() => router.push("/pastebin")}>
-          pastebin
-        </button>
-        <button type="button" className="btn btn-sm" onClick={() => router.push("/paste/new")}>
-          new paste
-        </button>
-        <ThemeToggle />
-        {auth?.logged_in ? (
-          <>
-            <button type="button" className="btn btn-sm" onClick={() => router.push("/my")}>
-              files
-            </button>
-            <button type="button" className="btn btn-sm" onClick={() => router.push("/profile")}>
-              profile
-            </button>
-            <button
-              type="button"
-              className="btn btn-sm"
-              onClick={() =>
-                fetch("/api/auth/logout", { method: "POST" }).then(() => {
-                  setAuth({ logged_in: false });
-                  router.push("/");
-                  router.refresh();
-                })
-              }
-            >
-              logout
-            </button>
-          </>
-        ) : (
-          <button type="button" className="btn btn-sm" onClick={() => router.push("/")}>
-            login
-          </button>
-        )}
+      <div className="nav-inner">
+        <Link href="/" className="nav-brand">
+          <IconBox size={18} />
+          telebox
+        </Link>
+        <div className="nav-links">
+          <Link href="/" className="nav-btn" style={{ textDecoration: "none" }}>
+            home
+          </Link>
+          <Link href="/pastebin" className="nav-btn" style={{ textDecoration: "none" }}>
+            pastebin
+          </Link>
+          <Link href="/paste/new" className="nav-btn" style={{ textDecoration: "none" }}>
+            new paste
+          </Link>
+          <ThemeToggle />
+          {auth?.logged_in ? (
+            <>
+              <Link href="/my" className="nav-btn" style={{ textDecoration: "none" }}>
+                files
+              </Link>
+              <Link href="/profile" className="nav-btn" style={{ textDecoration: "none" }}>
+                profile
+              </Link>
+              <button
+                type="button"
+                className="nav-btn"
+                onClick={() =>
+                  fetch("/api/auth/logout", { method: "POST" }).then(() => {
+                    setAuth({ logged_in: false });
+                    router.push("/");
+                    router.refresh();
+                  })
+                }
+              >
+                logout
+              </button>
+            </>
+          ) : (
+            <Link href="/" className="nav-btn" style={{ textDecoration: "none" }}>
+              login
+            </Link>
+          )}
+        </div>
       </div>
     </nav>
   );

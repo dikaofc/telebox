@@ -79,43 +79,35 @@ export default async function FilePreview({ params }: { params: Promise<{ id: st
         </div>
 
       {mediaType === "image" && row.mime !== "image/svg+xml" && (
-        <div style={{ marginTop: 24, textAlign: "center" }}>
+        <div className="media-frame">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={`/raw/${id}`}
-            alt={safeName}
-            style={{ maxWidth: "100%", height: "auto", borderRadius: 8 }}
-          />
+          <img src={`/raw/${id}`} alt={safeName} loading="lazy" />
         </div>
       )}
 
       {mediaType === "video" && (
-        <div style={{ marginTop: 24, textAlign: "center" }}>
-          <video
-            src={`/raw/${id}`}
-            controls
-            style={{ maxWidth: "100%", borderRadius: 8 }}
-          />
+        <div className="media-frame">
+          <video src={`/raw/${id}`} controls playsInline preload="metadata" />
         </div>
       )}
 
       {mediaType === "audio" && (
-        <div style={{ marginTop: 24, textAlign: "center" }}>
-          <audio src={`/raw/${id}`} controls style={{ width: "100%" }} />
+        <div className="media-frame">
+          <audio src={`/raw/${id}`} controls />
         </div>
       )}
 
       {isText && row.size <= TEXT_PREVIEW_MAX_BYTES && <TextPreview id={id} mime={row.mime} />}
 
       {isText && row.size > TEXT_PREVIEW_MAX_BYTES && (
-        <p style={{ marginTop: 24, color: "#999" }}>Preview not available for large text files — use Download.</p>
+        <p className="muted" style={{ marginTop: 24 }}>Preview not available for large text files — use Download.</p>
       )}
 
-      {!["image", "video", "audio"].includes(mediaType) && !isText && (
-        <p style={{ marginTop: 24, color: "#999" }}>Preview not available for this file type.</p>
+      {["image", "video", "audio"].includes(mediaType) === false && !isText && (
+        <p className="muted" style={{ marginTop: 24 }}>Preview not available for this file type.</p>
       )}
 
-      <div style={{ marginTop: 24, display: "flex", gap: 12, flexWrap: "wrap" }}>
+      <div className="card-actions" style={{ marginTop: 24 }}>
         <a
           href={`/raw/${id}/${encodeURIComponent(row.name)}?dl=1`}
           download={safeName}

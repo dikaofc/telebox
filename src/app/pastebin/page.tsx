@@ -21,7 +21,7 @@ function timeAgo(iso: string): string {
 }
 
 export default function PastebinPage() {
-  const [pastes, setPastes] = useState<Paste[]>([]);
+  const [pastes, setPastes] = useState<Paste[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   function load() {
@@ -37,7 +37,7 @@ export default function PastebinPage() {
     const res = await fetch(`/api/pastes/${id}/${kind}`, { method: "POST" });
     if (!res.ok) { setError("action failed"); return; }
     const d = await res.json();
-    setPastes((prev) => prev.map((p) =>
+    setPastes((prev) => (prev ?? []).map((p) =>
       p.id === id
         ? { ...p, liked: kind === "like" ? d.liked : p.liked, starred: kind === "star" ? d.starred : p.starred, like_count: kind === "like" ? d.like_count : p.like_count, star_count: kind === "star" ? d.star_count : p.star_count }
         : p
@@ -51,19 +51,26 @@ export default function PastebinPage() {
         <div className="page-header">
           <div>
             <h1 className="page-title">Pastebin</h1>
-            <p className="muted" style={{ margin: "6px 0 0", fontSize: 14 }}>public pastes — copy, comment, like, star</p>
+            <p className="page-sub">public pastes — copy, comment, like, star</p>
           </div>
-          <Link href="/paste/new" className="btn btn-primary" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+          <Link href="/paste/new" className="btn btn-primary" style={{ textDecoration: "none" }}>
             <IconPlus size={15} /> New Paste
           </Link>
         </div>
 
         {error && <p className="error-text">{error}</p>}
-        {pastes.length === 0 && !error && <p className="empty-state">No pastes yet.</p>}
+        {pastes === null && !error && (
+          <>
+            <div className="skeleton" style={{ height: 96, marginBottom: 14 }} />
+            <div className="skeleton" style={{ height: 96, marginBottom: 14 }} />
+            <div className="skeleton" style={{ height: 96 }} />
+          </>
+        )}
+        {pastes !== null && pastes.length === 0 && !error && <p className="empty-state">No pastes yet.</p>}
 
-        {pastes.map((p) => (
-          <div key={p.id} className="card">
-            <Link href={`/paste/${p.id}`} className="card-title" style={{ textDecoration: "none" }}>
+        {pastes !== null && pastes.map((p) => (
+          <div key={p.id} className="card card-hover">
+            <Link href={`/paste/${p.id}`} className="card-title">
               {p.title}
             </Link>
             <div className="card-meta">
@@ -90,7 +97,7 @@ export default function PastebinPage() {
               <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
                 <IconComment size={14} /> {p.comment_count}
               </span>
-              <Link href={`/paste/${p.id}`} style={{ display: "inline-flex", alignItems: "center", gap: 4, textDecoration: "none" }}>
+              <Link href={`/paste/${p.id}`} className="link-btn" style={{ display: "inline-flex", alignItems: "center", gap: 4, textDecoration: "none" }}>
                 <IconEye size={14} /> view
               </Link>
             </div>

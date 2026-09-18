@@ -190,7 +190,6 @@ export default function Home() {
           <form
             onSubmit={(e) => { e.preventDefault(); authSubmit(authMode); }}
             className="card"
-            style={{ background: "var(--surface)" }}
           >
             <h3 className="section-title">{authMode === "login" ? "Login" : "Sign Up"}</h3>
             <div className="field">
@@ -212,30 +211,15 @@ export default function Home() {
           onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
           onDragLeave={() => setDragOver(false)}
           onDrop={(e) => { e.preventDefault(); setDragOver(false); uploadFiles(e.dataTransfer.files); }}
-          className="dropzone"
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 10,
-            border: dragOver ? "2px solid var(--foreground)" : "1px dashed var(--faint)",
-            borderRadius: "var(--radius)",
-            padding: "48px 24px",
-            textAlign: "center",
-            cursor: "pointer",
-            marginTop: 8,
-            background: dragOver ? "var(--surface)" : "transparent",
-            transition: "border-color .12s, background .12s",
-          }}
+          className={`dropzone${dragOver ? " dragover" : ""}`}
         >
           <input type="file" multiple hidden onChange={(e) => { if (e.target.files) uploadFiles(e.target.files); }} />
-          <IconUpload size={32} />
+          <IconUpload size={30} />
           {busy ? "uploading\u2026" : "drop files or click to choose (multi-file ok)"}
-          <span className="faint" style={{ fontSize: 13, display: "inline-flex", alignItems: "center", gap: 4 }}>
+          <span className="faint" style={{ fontSize: 13, display: "inline-flex", alignItems: "center", gap: 6 }}>
             <IconClock size={13} />
             Expiry:
-            <select value={ttl} onChange={(e) => setTtl(e.target.value)} className="select" style={{ padding: "4px 8px", fontSize: 13, marginLeft: 4 }}>
+            <select value={ttl} onChange={(e) => setTtl(e.target.value)} className="select" style={{ padding: "5px 30px 5px 10px", fontSize: 13, marginLeft: 4 }}>
               {TTL_OPTIONS.map(([v, label]) => (
                 <option key={v || "never"} value={v}>{label}</option>
               ))}
@@ -246,12 +230,12 @@ export default function Home() {
         {error && <p className="error-text">{error}</p>}
 
         {busy && progress && (
-          <div className="card" style={{ background: "var(--surface)", marginTop: 12 }} role="status" aria-live="polite">
+          <div className="card" role="status" aria-live="polite">
             <div style={{ fontSize: 13, wordBreak: "break-all" }}>
               uploading {progress.name} — part {progress.done}/{progress.total}
             </div>
-            <div style={{ height: 6, borderRadius: 3, background: "var(--faint)", marginTop: 8, overflow: "hidden" }}>
-              <div style={{ height: "100%", width: `${Math.round((progress.done / progress.total) * 100)}%`, background: "var(--foreground)" }} />
+            <div className="progress-track">
+              <div className="progress-fill" style={{ width: `${Math.round((progress.done / progress.total) * 100)}%` }} />
             </div>
           </div>
         )}
@@ -259,24 +243,23 @@ export default function Home() {
         {results.length > 0 && (
           <div style={{ marginTop: 16 }}>
             {results.map((r) => (
-              <div key={r.id} className="card" style={{ background: "var(--surface)" }}>
+              <div key={r.id} className="card">
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <IconFile size={15} />
-                  <span style={{ fontWeight: 500, wordBreak: "break-all" }}>{r.name}</span>
+                  <span style={{ fontWeight: 550, wordBreak: "break-all" }}>{r.name}</span>
                   {r.dedup && <span className="badge">dedup</span>}
                 </div>
                 <code className="code-block" style={{ marginTop: 8 }}>{r.url}</code>
                 <div className="card-actions">
-                  <a href={`/i/${r.id}`} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                  <a className="btn btn-sm" href={`/i/${r.id}`} style={{ textDecoration: "none" }}>
                     <IconEye size={14} /> preview
                   </a>
-                  <a href={`${r.url}?dl=1`} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                  <a className="btn btn-sm" href={`${r.url}?dl=1`} style={{ textDecoration: "none" }}>
                     <IconDownload size={14} /> download
                   </a>
                   <button
                     type="button"
-                    className="link-btn"
-                    style={{ display: "inline-flex", alignItems: "center", gap: 4, textDecoration: "none" }}
+                    className="btn btn-sm"
                     onClick={() => navigator.clipboard.writeText(r.url)}
                   >
                     <IconCopy size={14} /> copy

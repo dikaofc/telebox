@@ -15,7 +15,7 @@ function formatSize(bytes: number): string {
 }
 
 export default function MyPage() {
-  const [files, setFiles] = useState<FileItem[]>([]);
+  const [files, setFiles] = useState<FileItem[] | null>(null);
   const [keys, setKeys] = useState<KeyItem[]>([]);
   const [newKeyName, setNewKeyName] = useState("");
   const [newKeyValue, setNewKeyValue] = useState<string | null>(null);
@@ -24,7 +24,7 @@ export default function MyPage() {
   const [copiedKey, setCopiedKey] = useState(false);
 
   function loadFiles() {
-    fetch("/api/files").then((r) => r.json()).then((d) => setFiles(d.files ?? [])).catch(() => {});
+    fetch("/api/files").then((r) => r.json()).then((d) => setFiles(d.files ?? [])).catch(() => setFiles([]));
   }
   function loadKeys() {
     fetch("/api/keys").then((r) => r.json()).then((d) => setKeys(d.keys ?? [])).catch(() => {});
@@ -103,15 +103,22 @@ export default function MyPage() {
 
         {tab === "files" && (
           <div>
-            {files.length === 0 && <p className="empty-state">No files yet.</p>}
-            {files.map((f) => (
+            {files === null && (
+              <>
+                <div className="skeleton" style={{ height: 56, marginBottom: 12 }} />
+                <div className="skeleton" style={{ height: 56, marginBottom: 12 }} />
+                <div className="skeleton" style={{ height: 56 }} />
+              </>
+            )}
+            {files !== null && files.length === 0 && <p className="empty-state">No files yet.</p>}
+            {files !== null && files.map((f) => (
               <div key={f.id} className="item-row" style={{ display: "block" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
                   <div className="item-main">
                     <a href={`/i/${f.id}`} className="item-title" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
                       <IconFile size={14} /> {f.name}
                     </a>
-                    <div className="item-sub" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                    <div className="item-sub" style={{ display: "inline-flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                       <IconClock size={12} />
                       {formatSize(f.size)} &middot; {new Date(f.created_at).toLocaleDateString()}
                       {f.expires_at && (
@@ -145,9 +152,9 @@ export default function MyPage() {
             </form>
 
             {newKeyValue && (
-              <div className="notice" style={{ background: "#ecfdf5" }}>
-                <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 4 }}>Your new API key (copy it now, it won&apos;t be shown again):</div>
-                <code style={{ display: "block", padding: 8, background: "#fff", borderRadius: 4, wordBreak: "break-all", fontSize: 13 }}>
+              <div className="notice">
+                <div style={{ fontSize: 13, fontWeight: 550, marginBottom: 4 }}>Your new API key (copy it now, it won&apos;t be shown again):</div>
+                <code className="code-block" style={{ display: "block", wordBreak: "break-all" }}>
                   {newKeyValue}
                 </code>
                 <button onClick={copyKey} className="btn btn-sm" style={{ marginTop: 8, display: "inline-flex", alignItems: "center", gap: 4 }}>

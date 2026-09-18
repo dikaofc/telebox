@@ -70,9 +70,9 @@ export function SharePanel({ fileId, fileName }: { fileId: string; fileName: str
       </button>
 
       {open && shares !== null && (
-        <div style={{ marginTop: 8, padding: 10, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 6 }}>
-          <form onSubmit={createShare} style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 8 }}>
-            <select value={ttl} onChange={(e) => setTtl(e.target.value)} className="select" style={{ padding: "4px 6px", fontSize: 12 }}>
+        <div className="notice">
+          <form onSubmit={createShare} style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 8, flexWrap: "wrap" }}>
+            <select value={ttl} onChange={(e) => setTtl(e.target.value)} className="select" style={{ padding: "5px 30px 5px 10px", fontSize: 12 }}>
               <option value="3600">1 hour</option>
               <option value="86400">1 day</option>
               <option value="604800">7 days</option>
