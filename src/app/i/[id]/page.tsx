@@ -1,8 +1,10 @@
 import { notFound } from "next/navigation";
+import Link from "next/link";
 import { headers } from "next/headers";
 import db from "@/lib/db";
-import { getSessionUserId } from "@/lib/session";
-import { deleteMessage } from "@/lib/telegram";
+import { resolveUserIdFromHeaders } from "@/lib/session";
+import { deleteStoredBlobs } from "@/lib/file-storage";
+import { TEXT_PREVIEW_MAX_BYTES } from "@/lib/multipart";
 import { TextPreview } from "@/components/text-preview";
 import { CopyUrlButton } from "@/components/copy-url-button";
 import { SiteNav } from "@/components/site-nav";
@@ -18,10 +20,10 @@ function formatSize(bytes: number): string {
 
 // Anonymous uploads (user_id=0) are public share links. Files owned by a
 // real account are private to that account — a different (or no) session
-// gets the same result as a missing file.
+// gets the same result as a missing file. Auth is session or API key.
 async function canAccess(rowUserId: number | null): Promise<boolean> {
   if (rowUserId == null || rowUserId === 0) return true; // public file
-  const userId = await getSessionUserId();
+  const userId = await resolveUserIdFromHeaders();
   return userId === rowUserId;
 }
 
@@ -42,15 +44,15 @@ export default async function FilePreview({ params }: { params: Promise<{ id: st
   // Date.now() here is a read of the request clock, not a re-render hazard.
   // eslint-disable-next-line react-hooks/purity -- server component, once per request
   const now = Date.now();
-  const expired = await db.get<{ tg_chat_id: string; tg_message_id: number }>(
-    "SELECT tg_chat_id, tg_message_id FROM files WHERE id = ? AND expires_at IS NOT NULL AND expires_at < ?",
+  const expired = await db.get<{ tg_chat_id: string; tg_message_id: number; storage_kind: string }>(
+    "SELECT tg_chat_id, tg_message_id, storage_kind FROM files WHERE id = ? AND expires_at IS NOT NULL AND expires_at < ?",
     id,
     now
   );
   if (expired) {
     await db.run("UPDATE files SET deleted_at = ? WHERE id = ?", now, id);
     await db.run("DELETE FROM shares WHERE file_id = ?", id);
-    void deleteMessage(expired.tg_chat_id, expired.tg_message_id);
+    void deleteStoredBlobs(id, { chatId: expired.tg_chat_id, messageId: expired.tg_message_id }, expired.storage_kind);
     notFound();
   }
 
@@ -71,9 +73,9 @@ export default async function FilePreview({ params }: { params: Promise<{ id: st
               {formatSize(row.size)} &middot; {row.mime.split("/").pop()?.toUpperCase()}
             </p>
           </div>
-          <a href="/my" className="link-btn" style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+          <Link href="/my" className="link-btn" style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
             <IconArrowLeft size={14} /> files
-          </a>
+          </Link>
         </div>
 
       {mediaType === "image" && row.mime !== "image/svg+xml" && (
@@ -103,7 +105,11 @@ export default async function FilePreview({ params }: { params: Promise<{ id: st
         </div>
       )}
 
-      {isText && <TextPreview id={id} mime={row.mime} />}
+      {isText && row.size <= TEXT_PREVIEW_MAX_BYTES && <TextPreview id={id} mime={row.mime} />}
+
+      {isText && row.size > TEXT_PREVIEW_MAX_BYTES && (
+        <p style={{ marginTop: 24, color: "#999" }}>Preview not available for large text files — use Download.</p>
+      )}
 
       {!["image", "video", "audio"].includes(mediaType) && !isText && (
         <p style={{ marginTop: 24, color: "#999" }}>Preview not available for this file type.</p>

@@ -13,33 +13,48 @@ export function SharePanel({ fileId, fileName }: { fileId: string; fileName: str
 
   async function toggle() {
     if (shares !== null) { setOpen(!open); return; }
-    const res = await fetch(`/api/files/${fileId}/shares`);
-    const d = await res.json();
-    setShares(d.shares ?? []);
-    setOpen(true);
+    try {
+      const res = await fetch(`/api/files/${fileId}/shares`);
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) { setMsg(d?.error ?? "failed to load shares"); setOpen(true); return; }
+      setShares(d.shares ?? []);
+      setOpen(true);
+    } catch {
+      setMsg("failed to load shares");
+      setOpen(true);
+    }
   }
 
   async function createShare(e: React.FormEvent) {
     e.preventDefault();
     setMsg(null);
-    const res = await fetch(`/api/files/${fileId}/shares`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ttl: ttl ? Number(ttl) : null }),
-    });
-    if (!res.ok) { setMsg("create failed"); return; }
-    const d = await res.json();
-    setShares((prev) => [...(prev ?? []), d]);
+    try {
+      const res = await fetch(`/api/files/${fileId}/shares`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ttl: ttl ? Number(ttl) : null }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) { setMsg(d?.error ?? "create failed"); return; }
+      setShares((prev) => [...(prev ?? []), d]);
+    } catch {
+      setMsg("create failed");
+    }
   }
 
   async function revoke(shareId: string) {
     setMsg(null);
-    await fetch(`/api/files/${fileId}/shares`, {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: shareId }),
-    });
-    setShares((prev) => (prev ?? []).filter((s) => s.id !== shareId));
+    try {
+      const res = await fetch(`/api/files/${fileId}/shares`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: shareId }),
+      });
+      if (!res.ok) { setMsg("revoke failed"); return; }
+      setShares((prev) => (prev ?? []).filter((s) => s.id !== shareId));
+    } catch {
+      setMsg("revoke failed");
+    }
   }
 
   async function copy(url: string) {
@@ -50,38 +65,38 @@ export function SharePanel({ fileId, fileName }: { fileId: string; fileName: str
 
   return (
     <div style={{ marginTop: 8 }}>
-      <button onClick={toggle} style={{ background: "none", border: "1px solid #ccc", borderRadius: 4, padding: "3px 10px", cursor: "pointer", fontSize: 12, color: "#333" }}>
+      <button onClick={toggle} className="btn btn-sm" type="button">
         {open ? "hide shares" : "share"}
       </button>
 
       {open && shares !== null && (
-        <div style={{ marginTop: 8, padding: 10, background: "#f7f7f7", borderRadius: 6 }}>
+        <div style={{ marginTop: 8, padding: 10, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 6 }}>
           <form onSubmit={createShare} style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 8 }}>
-            <select value={ttl} onChange={(e) => setTtl(e.target.value)} style={{ padding: "4px 6px", borderRadius: 4, border: "1px solid #ccc", fontSize: 12 }}>
+            <select value={ttl} onChange={(e) => setTtl(e.target.value)} className="select" style={{ padding: "4px 6px", fontSize: 12 }}>
               <option value="3600">1 hour</option>
               <option value="86400">1 day</option>
               <option value="604800">7 days</option>
               <option value="2592000">30 days</option>
               <option value="">never</option>
             </select>
-            <button type="submit" style={{ background: "#111", color: "#fff", border: "none", borderRadius: 4, padding: "4px 10px", cursor: "pointer", fontSize: 12 }}>
+            <button type="submit" className="btn btn-sm btn-primary">
               create link
             </button>
           </form>
 
-          {msg && <p style={{ color: "#c00", fontSize: 12, margin: "0 0 8px" }}>{msg}</p>}
+          {msg && <p className="error-text" style={{ fontSize: 12, margin: "0 0 8px" }}>{msg}</p>}
 
-          {shares.length === 0 && <p style={{ color: "#999", fontSize: 12, margin: 0 }}>No share links for {fileName} yet.</p>}
+          {shares.length === 0 && <p className="faint" style={{ fontSize: 12, margin: 0 }}>No share links for {fileName} yet.</p>}
           {shares.map((s) => (
             <div key={s.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 6 }}>
-              <code style={{ fontSize: 11, wordBreak: "break-all", color: "#333", flex: 1 }}>
+              <code style={{ fontSize: 11, wordBreak: "break-all", color: "var(--muted)", flex: 1 }}>
                 {s.url}
-                {s.expires_at && <span style={{ color: "#999", display: "block" }}>expires {new Date(s.expires_at).toLocaleString()}</span>}
+                {s.expires_at && <span style={{ display: "block" }}>expires {new Date(s.expires_at).toLocaleString()}</span>}
               </code>
-              <button onClick={() => copy(s.url)} style={{ background: "none", border: "1px solid #ccc", borderRadius: 4, padding: "2px 8px", cursor: "pointer", fontSize: 11, flexShrink: 0 }}>
+              <button onClick={() => copy(s.url)} className="btn btn-sm" type="button">
                 {copied === s.url ? "copied" : "copy"}
               </button>
-              <button onClick={() => revoke(s.id)} style={{ background: "none", border: "1px solid #c00", color: "#c00", borderRadius: 4, padding: "2px 8px", cursor: "pointer", fontSize: 11, flexShrink: 0 }}>
+              <button onClick={() => revoke(s.id)} className="btn btn-sm btn-ghost-danger" type="button">
                 revoke
               </button>
             </div>

@@ -1,8 +1,7 @@
 import { notFound } from "next/navigation";
-import { headers } from "next/headers";
-import { createHash } from "node:crypto";
+import Link from "next/link";
 import db from "@/lib/db";
-import { getSessionUserId } from "@/lib/session";
+import { getSessionUserId, resolveActorFromHeaders } from "@/lib/session";
 import { SiteNav } from "@/components/site-nav";
 import { CodeBlock } from "@/components/code-block";
 import { PasteActions } from "@/components/paste-actions";
@@ -15,22 +14,11 @@ type PasteRow = {
   id: string; title: string; content: string; language: string;
   created_at: number; author_name: string;
 };
-type CommentRow = { id: string; author_name: string; body: string; created_at: number; user_id?: number };
-
-/** server-side actor: session user if logged in, else IP hash (mirrors API). */
-async function serverActor(): Promise<string> {
-  const userId = await getSessionUserId();
-  if (userId) return `user:${userId}`;
-  const h = await headers();
-  const ip = h.get("x-forwarded-for")?.split(",")[0]?.trim() ?? h.get("x-real-ip") ?? "unknown";
-  const secret = process.env.SESSION_SECRET || "dev-secret-change-in-production";
-  const hash = createHash("sha256").update(`${ip}:${secret}`).digest("hex").slice(0, 16);
-  return `ip:${hash}`;
-}
+type CommentRow = { id: string; user_id: number; author_name: string; body: string; created_at: number; avatar_file_id: string | null };
 
 export default async function PastePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const actor = await serverActor();
+  const actor = await resolveActorFromHeaders();
 
   const row = await db.get<PasteRow>(
     "SELECT id, title, content, language, created_at, author_name FROM pastes WHERE id = ?",
@@ -51,7 +39,9 @@ export default async function PastePage({ params }: { params: Promise<{ id: stri
     id, id
   );
   const comments = await db.all<CommentRow>(
-    "SELECT id, author_name, body, created_at FROM paste_comments WHERE paste_id = ? ORDER BY created_at ASC",
+    `SELECT c.id, c.user_id, c.author_name, c.body, c.created_at, u.avatar_file_id
+     FROM paste_comments c LEFT JOIN users u ON c.user_id = u.id
+    WHERE c.paste_id = ? ORDER BY c.created_at ASC LIMIT 200`,
     id
   );
 
@@ -66,9 +56,9 @@ export default async function PastePage({ params }: { params: Promise<{ id: stri
               {row.author_name || "anonymous"} &middot; {new Date(row.created_at).toLocaleString()} &middot; <span className="badge">{row.language}</span>
             </div>
           </div>
-          <a href="/pastebin" className="link-btn" style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+          <Link href="/pastebin" className="link-btn" style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
             <IconArrowLeft size={14} /> back
-          </a>
+          </Link>
         </div>
 
         <CodeBlock code={row.content} language={row.language} className="code-full" />
@@ -87,7 +77,7 @@ export default async function PastePage({ params }: { params: Promise<{ id: stri
           initial={comments.map((c) => ({
             id: c.id,
             author: c.author_name || "anonymous",
-            avatar_url: null,
+            avatar_url: c.user_id ? (c.avatar_file_id ? `/avatar/${c.user_id}` : null) : null,
             body: c.body,
             created_at: new Date(c.created_at).toISOString(),
             user_id: c.user_id ?? 0,

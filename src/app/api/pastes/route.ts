@@ -2,14 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import db from "@/lib/db";
 import { newId } from "@/lib/id";
 import { checkRateLimit } from "@/lib/rate-limit";
-import { resolveActor } from "@/lib/session";
+import { resolveActor, clientIp } from "@/lib/session";
 import { validatePaste } from "@/lib/paste";
 
 export const runtime = "nodejs";
-
-function clientIp(req: NextRequest): string {
-  return req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? req.headers.get("x-real-ip") ?? "unknown";
-}
 
 /** Public feed: newest first, like/star/comment counts, viewer's own flags. */
 export async function GET(req: NextRequest) {
@@ -57,10 +53,17 @@ export async function POST(req: NextRequest) {
   const authorName = userId ? (await db.get<{ name: string }>("SELECT name FROM users WHERE id = ?", userId))?.name ?? "" : "";
 
   const id = newId();
-  await db.run(
-    "INSERT INTO pastes (id, title, content, language, user_id, author_name, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-    id, v.title, v.content, v.language, userId, authorName || "anonymous", Date.now()
-  );
+  try {
+    await db.run(
+      "INSERT INTO pastes (id, title, content, language, user_id, author_name, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      id, v.title, v.content, v.language, userId, authorName || "anonymous", Date.now()
+    );
+  } catch (e) {
+    // Extremely unlikely (24-char random id collision); answer cleanly rather
+    // than surfacing a 500 HTML page.
+    console.error("paste insert failed", e);
+    return NextResponse.json({ error: "create failed, please retry" }, { status: 500 });
+  }
 
   return NextResponse.json({ id, url: `/paste/${id}` }, { status: 201 });
 }

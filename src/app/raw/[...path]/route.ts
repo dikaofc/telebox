@@ -1,24 +1,24 @@
 import { NextRequest } from "next/server";
 import db from "@/lib/db";
-import { getSessionUserId } from "@/lib/session";
+import { resolveUserId } from "@/lib/session";
 import { isExpired, buildRawResponse, type RawRow } from "@/lib/raw-serve";
-import { deleteMessage } from "@/lib/telegram";
+import { deleteStoredBlobs } from "@/lib/file-storage";
 
 export const runtime = "nodejs";
 
 // Mark expired files deleted so they stop appearing in listings/stats, and
-// remove the Telegram blob. Runs on each access — a real janitor job can
-// replace this once there's a cron.
+// remove the Telegram blob. Runs on each access — the cron janitor remains
+// the guarantee for never-requested files.
 async function sweepExpired(id: string): Promise<void> {
-  const row = await db.get<{ tg_chat_id: string; tg_message_id: number }>(
-    "SELECT tg_chat_id, tg_message_id FROM files WHERE id = ? AND expires_at IS NOT NULL AND expires_at < ? AND deleted_at IS NULL",
+  const row = await db.get<{ tg_chat_id: string; tg_message_id: number; storage_kind: string }>(
+    "SELECT tg_chat_id, tg_message_id, storage_kind FROM files WHERE id = ? AND expires_at IS NOT NULL AND expires_at < ? AND deleted_at IS NULL",
     id,
     Date.now()
   );
   if (row) {
     await db.run("UPDATE files SET deleted_at = ? WHERE id = ?", Date.now(), id);
     await db.run("DELETE FROM shares WHERE file_id = ?", id);
-    void deleteMessage(row.tg_chat_id, row.tg_message_id);
+    void deleteStoredBlobs(id, { chatId: row.tg_chat_id, messageId: row.tg_message_id }, row.storage_kind);
   }
 }
 
@@ -26,17 +26,27 @@ type Row = { user_id: number | null } & RawRow;
 
 async function getRow(id: string) {
   return db.get<Row>(
-    "SELECT name, mime, size, tg_file_id, expires_at, user_id FROM files WHERE id = ? AND deleted_at IS NULL",
+    "SELECT id, name, mime, size, tg_file_id, storage_kind, expires_at, user_id FROM files WHERE id = ? AND deleted_at IS NULL",
     id
   );
 }
 
 // Anonymous uploads (user_id=0) are public share links; account files are
 // private to the owner. Unknown id or wrong owner both read as 404.
-async function canAccess(rowUserId: number | null): Promise<boolean> {
+// Auth is session cookie or API-key bearer (see resolveUserId).
+async function canAccess(req: NextRequest, rowUserId: number | null): Promise<boolean> {
   if (rowUserId == null || rowUserId === 0) return true;
-  const userId = await getSessionUserId();
+  const userId = await resolveUserId(req);
   return userId === rowUserId;
+}
+
+/** The name path segment is cosmetic; malformed encoding must not 500. */
+function safeDecode(raw: string): string {
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return raw;
+  }
 }
 
 /**
@@ -47,20 +57,20 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ path
   const { path } = await params;
   const [id, ...rest] = path;
   if (!id) return new Response("not found", { status: 404 });
-  const prettyName = rest.length > 0 ? decodeURIComponent(rest.join("/")) : null;
+  const prettyName = rest.length > 0 ? safeDecode(rest.join("/")) : null;
 
   const row = await getRow(id);
-  if (!row || !(await canAccess(row.user_id))) return new Response("not found", { status: 404 });
+  if (!row || !(await canAccess(req, row.user_id))) return new Response("not found", { status: 404 });
   if (isExpired(row)) {
     await sweepExpired(id);
     return new Response("file expired", { status: 410 });
   }
 
   const dl = req.nextUrl.searchParams.get("dl") === "1";
-  return buildRawResponse(row, prettyName, dl);
+  return buildRawResponse(row, prettyName, dl, req.headers.get("range"));
 }
 
-export async function HEAD(_req: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
+export async function HEAD(req: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
   const { path } = await params;
   const [id] = path;
   if (!id) return new Response(null, { status: 404 });
@@ -69,7 +79,7 @@ export async function HEAD(_req: NextRequest, { params }: { params: Promise<{ pa
     "SELECT size, expires_at, user_id FROM files WHERE id = ? AND deleted_at IS NULL",
     id
   );
-  if (!row || !(await canAccess(row.user_id))) return new Response(null, { status: 404 });
+  if (!row || !(await canAccess(req, row.user_id))) return new Response(null, { status: 404 });
   if (row.expires_at !== null && Date.now() > row.expires_at) {
     await sweepExpired(id);
     return new Response(null, { status: 410 });

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { randomBytes, createHash } from "node:crypto";
 import db from "@/lib/db";
 import { getSessionUserId } from "@/lib/session";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 
@@ -28,6 +29,11 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   const userId = await getSessionUserId();
   if (!userId) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+
+  const rl = await checkRateLimit(`key-create:${userId}`, 10, 60_000);
+  if (!rl.allowed) {
+    return NextResponse.json({ error: "rate limited" }, { status: 429, headers: { "Retry-After": String(rl.retryAfter ?? 60) } });
+  }
 
   const body = await req.json().catch(() => null);
   const name = String(body?.name ?? "").slice(0, 100);
@@ -58,6 +64,6 @@ export async function DELETE(req: NextRequest) {
   const row = await db.get("SELECT id FROM api_keys WHERE id = ? AND user_id = ?", keyId, userId);
   if (!row) return NextResponse.json({ error: "not found" }, { status: 404 });
 
-  await db.run("DELETE FROM api_keys WHERE id = ?", keyId);
+  await db.run("DELETE FROM api_keys WHERE id = ? AND user_id = ?", keyId, userId);
   return NextResponse.json({ ok: true });
 }

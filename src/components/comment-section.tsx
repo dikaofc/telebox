@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { IconComment, IconTrash, IconPencil, IconCheck, IconX } from "@/components/icons";
 
 type Comment = {
@@ -16,6 +16,7 @@ export function CommentSection({ pasteId, initial, currentUserId }: { pasteId: s
   const [comments, setComments] = useState<Comment[]>(initial);
   const [comment, setComment] = useState("");
   const [msg, setMsg] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
 
@@ -29,15 +30,21 @@ export function CommentSection({ pasteId, initial, currentUserId }: { pasteId: s
 
   async function addComment(e: React.FormEvent) {
     e.preventDefault();
+    if (busy) return;
+    setBusy(true);
     setMsg(null);
-    const res = await fetch(`/api/pastes/${pasteId}/comments`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ body: comment }),
-    });
-    if (!res.ok) { const d = await res.json().catch(() => null); setMsg(d?.error ?? "comment failed"); return; }
-    setComment("");
-    await refresh();
+    try {
+      const res = await fetch(`/api/pastes/${pasteId}/comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ body: comment }),
+      });
+      if (!res.ok) { const d = await res.json().catch(() => null); setMsg(d?.error ?? "comment failed"); return; }
+      setComment("");
+      await refresh();
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function deleteComment(id: string) {
@@ -75,7 +82,7 @@ export function CommentSection({ pasteId, initial, currentUserId }: { pasteId: s
           aria-label="Comment"
           className="input"
         />
-        <button type="submit" className="btn btn-primary">Comment</button>
+        <button type="submit" className="btn btn-primary" disabled={busy}>{busy ? "Sending..." : "Comment"}</button>
       </form>
       {msg && <p className="error-text" style={{ fontSize: 13 }}>{msg}</p>}
 
@@ -83,6 +90,7 @@ export function CommentSection({ pasteId, initial, currentUserId }: { pasteId: s
       {comments.map((c) => (
         <div key={c.id} className="item-row" style={{ display: "flex", alignItems: "flex-start" }}>
           {c.avatar_url
+            // eslint-disable-next-line @next/next/no-img-element -- /avatar/* is a dynamic route, bypass Image optimization
             ? <img src={c.avatar_url} alt="" className="avatar" style={{ width: 36, height: 36, marginRight: 10, flexShrink: 0 }} />
             : <div className="avatar-placeholder" style={{ width: 36, height: 36, marginRight: 10, flexShrink: 0, fontSize: 16 }} />}
           <div className="item-main" style={{ flex: 1, minWidth: 0 }}>

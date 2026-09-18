@@ -36,10 +36,33 @@ const SQLITE_SCHEMA = `
     tg_chat_id     TEXT NOT NULL,
     tg_message_id  INTEGER NOT NULL,
     tg_file_id     TEXT NOT NULL,
+    storage_kind   TEXT NOT NULL DEFAULT 'single',
     created_at     INTEGER NOT NULL,
     expires_at     INTEGER,
     deleted_at     INTEGER,
     FOREIGN KEY (user_id) REFERENCES users(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS upload_sessions (
+    id             TEXT PRIMARY KEY,
+    user_id        INTEGER NOT NULL,
+    name           TEXT NOT NULL,
+    mime           TEXT NOT NULL,
+    size           INTEGER NOT NULL,
+    sha256         TEXT NOT NULL,
+    total_parts    INTEGER NOT NULL,
+    expires_at     INTEGER,
+    created_at     INTEGER NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS file_parts (
+    file_id        TEXT NOT NULL,
+    part_index     INTEGER NOT NULL,
+    size           INTEGER NOT NULL,
+    tg_chat_id     TEXT NOT NULL,
+    tg_message_id  INTEGER NOT NULL,
+    tg_file_id     TEXT NOT NULL,
+    PRIMARY KEY (file_id, part_index)
   );
 
   CREATE TABLE IF NOT EXISTS api_keys (
@@ -95,6 +118,8 @@ const SQLITE_SCHEMA = `
 
   CREATE INDEX IF NOT EXISTS idx_files_sha256 ON files(sha256);
   CREATE INDEX IF NOT EXISTS idx_files_user ON files(user_id);
+  CREATE INDEX IF NOT EXISTS idx_file_parts_file ON file_parts(file_id, part_index);
+  CREATE INDEX IF NOT EXISTS idx_upload_sessions_created ON upload_sessions(created_at);
   CREATE INDEX IF NOT EXISTS idx_api_keys_hash ON api_keys(key_hash);
   CREATE INDEX IF NOT EXISTS idx_pastes_created ON pastes(created_at);
   CREATE INDEX IF NOT EXISTS idx_comments_paste ON paste_comments(paste_id, created_at);
@@ -123,9 +148,32 @@ const PG_SCHEMA = `
     tg_chat_id     TEXT NOT NULL,
     tg_message_id  BIGINT NOT NULL,
     tg_file_id     TEXT NOT NULL,
+    storage_kind   TEXT NOT NULL DEFAULT 'single',
     created_at     BIGINT NOT NULL,
     expires_at     BIGINT,
     deleted_at     BIGINT
+  );
+
+  CREATE TABLE IF NOT EXISTS upload_sessions (
+    id             TEXT PRIMARY KEY,
+    user_id        BIGINT NOT NULL,
+    name           TEXT NOT NULL,
+    mime           TEXT NOT NULL,
+    size           BIGINT NOT NULL,
+    sha256         TEXT NOT NULL,
+    total_parts    INTEGER NOT NULL,
+    expires_at     BIGINT,
+    created_at     BIGINT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS file_parts (
+    file_id        TEXT NOT NULL,
+    part_index     INTEGER NOT NULL,
+    size           BIGINT NOT NULL,
+    tg_chat_id     TEXT NOT NULL,
+    tg_message_id  BIGINT NOT NULL,
+    tg_file_id     TEXT NOT NULL,
+    PRIMARY KEY (file_id, part_index)
   );
 
   CREATE TABLE IF NOT EXISTS api_keys (
@@ -180,6 +228,8 @@ const PG_SCHEMA = `
 
   CREATE INDEX IF NOT EXISTS idx_files_sha256 ON files(sha256);
   CREATE INDEX IF NOT EXISTS idx_files_user ON files(user_id);
+  CREATE INDEX IF NOT EXISTS idx_file_parts_file ON file_parts(file_id, part_index);
+  CREATE INDEX IF NOT EXISTS idx_upload_sessions_created ON upload_sessions(created_at);
   CREATE INDEX IF NOT EXISTS idx_api_keys_hash ON api_keys(key_hash);
   CREATE INDEX IF NOT EXISTS idx_pastes_created ON pastes(created_at);
   CREATE INDEX IF NOT EXISTS idx_comments_paste ON paste_comments(paste_id, created_at);
@@ -190,6 +240,12 @@ const USER_COLUMN_MIGRATIONS = [
   "ALTER TABLE users ADD COLUMN IF NOT EXISTS name TEXT NOT NULL DEFAULT ''",
   "ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_file_id TEXT",
   "ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_mime TEXT",
+  "ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_tg_chat_id TEXT",
+  "ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_tg_message_id BIGINT",
+];
+
+const FILE_COLUMN_MIGRATIONS = [
+  "ALTER TABLE files ADD COLUMN IF NOT EXISTS storage_kind TEXT NOT NULL DEFAULT 'single'",
 ];
 
 /** Anonymous uploads use user_id=0; PG enforces the FK so the row must exist. */
@@ -213,9 +269,11 @@ class SqliteDb implements Db {
       // eslint-disable-next-line @typescript-eslint/no-require-imports -- intentional: node:sqlite must not be a static import so Postgres deployments never load it
       const { DatabaseSync } = require("node:sqlite") as typeof import("node:sqlite");
       this.db = new DatabaseSync(this.path);
+      this.db.exec("PRAGMA foreign_keys = ON");
       this.db.exec(SQLITE_SCHEMA);
       this.db.exec(SQLITE_SEED);
       this.runUserMigrations();
+        this.runFileMigrations();
     }
     return this.db;
   }
@@ -223,6 +281,17 @@ class SqliteDb implements Db {
   // SQLite has no ADD COLUMN IF NOT EXISTS; swallow "duplicate column" errors.
   private runUserMigrations(): void {
     for (const sql of USER_COLUMN_MIGRATIONS) {
+      const sqliteSql = sql.replace(/ ADD COLUMN IF NOT EXISTS /g, " ADD COLUMN ");
+      try {
+        this.db!.exec(sqliteSql);
+      } catch (e) {
+        if (!String(e).includes("duplicate column name")) throw e;
+      }
+    }
+  }
+
+  private runFileMigrations(): void {
+    for (const sql of FILE_COLUMN_MIGRATIONS) {
       const sqliteSql = sql.replace(/ ADD COLUMN IF NOT EXISTS /g, " ADD COLUMN ");
       try {
         this.db!.exec(sqliteSql);
@@ -263,8 +332,35 @@ pg.types.setTypeParser(pg.types.builtins.INT4, (v: string) => Number(v));
 pg.types.setTypeParser(pg.types.builtins.NUMERIC, (v: string) => Number(v));
 
 function toPgPlaceholders(sql: string): string {
+  // Replace only placeholders outside string literals — a `?` inside
+  // 'single' or "double" quotes is data, not a bind parameter.
   let n = 0;
-  return sql.replace(/\?/g, () => `$${++n}`);
+  let out = "";
+  let quote: string | null = null;
+  for (let i = 0; i < sql.length; i++) {
+    const ch = sql[i];
+    if (quote) {
+      out += ch;
+      if (ch === quote) {
+        // '' inside a single-quoted literal is an escaped quote, not the end.
+        if (quote === "'" && sql[i + 1] === "'") {
+          out += sql[i + 1];
+          i++;
+        } else {
+          quote = null;
+        }
+      }
+    } else if (ch === "'" || ch === '"') {
+      quote = ch;
+      out += ch;
+    } else if (ch === "?") {
+      n++;
+      out += `$${n}`;
+    } else {
+      out += ch;
+    }
+  }
+  return out;
 }
 
 export const __pgInternals = {
@@ -272,6 +368,7 @@ export const __pgInternals = {
   PG_SCHEMA,
   PG_SEED,
   USER_COLUMN_MIGRATIONS,
+  FILE_COLUMN_MIGRATIONS,
 };
 
 class PgDb implements Db {
@@ -291,6 +388,9 @@ class PgDb implements Db {
     await this.pool.query(PG_SCHEMA);
     await this.pool.query(PG_SEED);
     for (const sql of USER_COLUMN_MIGRATIONS) {
+      await this.pool.query(sql);
+    }
+    for (const sql of FILE_COLUMN_MIGRATIONS) {
       await this.pool.query(sql);
     }
   }

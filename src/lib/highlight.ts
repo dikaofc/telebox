@@ -39,11 +39,11 @@ const PY = new Set([
 ]);
 
 const JAVA = new Set([
-  "abstract","assert","boolean","break","byte","case","catch","char","class","const","continue","default","do","double","else","enum","extends","final","finally","float","for","goto","if","implements","import","instanceof","int","interface","long","native","new","package","private","protected","public","return","short","static","strictfp","super","switch","synchronized","this","throw","throws","transient","try","void","volatile","while","var","true","false","null","String","Integer","System","void"
+  "abstract","assert","boolean","break","byte","case","catch","char","class","const","continue","default","do","double","else","enum","extends","final","finally","float","for","goto","if","implements","import","instanceof","int","interface","long","native","new","package","private","protected","public","return","short","static","strictfp","super","switch","synchronized","this","throw","throws","transient","try","void","volatile","while","var","true","false","null","String","Integer","System"
 ]);
 
 const C = new Set(C_LIKE);
-const CPP = new Set([...C_LIKE, "using","namespace"]);
+const CPP = new Set([...C_LIKE]);
 const SQL = new Set([
   "select","from","where","insert","into","values","update","set","delete","create","table","alter","drop","index","view","join","left","right","inner","outer","on","group","by","order","limit","offset","having","and","or","not","null","is","in","like","between","as","distinct","case","when","then","else","end","primary","key","foreign","references","int","varchar","text","boolean","date","timestamp","default","unique","constraint"
 ]);
@@ -51,8 +51,6 @@ const SQL = new Set([
 const BASH = new Set([
   "if","then","else","elif","fi","for","while","until","do","done","case","esac","function","in","select","time","coproc","return","break","continue","exit","export","local","readonly","declare","set","unset","shift","source","exec","trap","echo","printf","cd","pwd","ls","mkdir","rm","cp","mv","grep","sed","awk","cat"
 ]);
-
-const MARKDOWN = new Set([]);
 
 const CONFIGS: Record<string, LangConfig> = {
   javascript: { line: ["//"], block: ["/*","*/"], template: true, keywords: JS_TS },
@@ -68,7 +66,7 @@ const CONFIGS: Record<string, LangConfig> = {
   css: { line: [], block: ["/*","*/"], keywords: new Set(["important","inherit","initial","unset","none","auto","solid","dashed","dotted","hidden","visible","flex","block","inline","grid"]) },
   sql: { line: ["--"], block: ["/*","*/"], keywords: SQL },
   bash: { line: ["#"], shebang: true, keywords: BASH },
-  markdown: { line: [], keywords: MARKDOWN },
+  markdown: { line: [], keywords: new Set() },
   text: { line: [], keywords: new Set() },
   plaintext: { line: [], keywords: new Set() },
 };
@@ -80,9 +78,11 @@ export function languageConfig(lang: string): LangConfig {
 }
 
 const IDENT = "[A-Za-z_$][A-Za-z0-9_$]*";
-const STRING_RE = /"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'/y;
-const TEMPLATE_RE = /`(?:[^`\\]|\\.)*`/y;
 const NUMBER_RE = /\b(?:0x[0-9a-fA-F]+|\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)\b/y;
+
+function escapeRe(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
 
 function buildPattern(config: LangConfig): { re: RegExp; map: string[] } {
   const groups: string[] = [];
@@ -91,27 +91,27 @@ function buildPattern(config: LangConfig): { re: RegExp; map: string[] } {
   const add = (name: string, src: string) => { groups.push(`(${src})`); names.push(name); };
 
   if (config.shebang) add("comment", /^#![^\n]*/.source);
-  const lineAlt = config.line.map((c) => c.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "[^\\n]*").join("|");
+  const lineAlt = config.line.map((c) => escapeRe(c) + "[^\\n]*").join("|");
   if (lineAlt) add("comment", lineAlt);
   if (config.block) {
-    const b = config.block.map((c) => c.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join(".*?");
-    add("comment", `${config.block[0].replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}[\\s\\S]*?${config.block[1].replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`);
-    void b;
+    add("comment", `${escapeRe(config.block[0])}[\\s\\S]*?${escapeRe(config.block[1])}`);
   }
   if (config.template) add("string", "`(?:[^`\\\\]|\\\\.)*`");
   add("string", `"(?:[^"\\\\\\n]|\\\\.)*"|'(?:[^'\\\\\\n]|\\\\.)*'`);
   add("number", NUMBER_RE.source);
 
   if (config.keywords.size) {
-    const kw = [...config.keywords].sort((a, b) => b.length - a.length).map((k) => k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
+    const kw = [...config.keywords].sort((a, b) => b.length - a.length).map(escapeRe).join("|");
     add("keyword", `\\b(?:${kw})\\b`);
   }
   add("function", `${IDENT}(?=\\s*\\()`);
-  add("type", `\\b\\(?:[A-Z][A-Za-z0-9_]*\\)\\b`);
+  // Capitalized identifier → user-defined type/class (fixed: was a literal
+  // parenthesis in the old pattern, so tok-type never matched).
+  add("type", `\\b[A-Z][A-Za-z0-9_]*\\b`);
   if (config.markup) {
     add("tag", `<\\/?\\b[A-Za-z][A-Za-z0-9-]*`);
     add("attr", `[A-Za-z-]+(?==)`);
-    add("punct", `[<>\\/]`);
+    add("punct", "[<>\\/]");
   }
   add("ident", IDENT);
   add("op", "[+\\-*/%=<>!&|^~?:]+");
@@ -121,21 +121,35 @@ function buildPattern(config: LangConfig): { re: RegExp; map: string[] } {
   return { re: new RegExp(groups.join("|"), "y"), map: names };
 }
 
+// Bounded cache: languages come from user input (paste composer), so an
+// unbounded Map here would grow forever under adversarial traffic. The
+// CONFIGS lookup normalizes to a known set anyway — anything unknown maps to
+// the same DEFAULT config — so cache misses are rare and evicting the oldest
+// entry keeps memory flat.
 const PATTERN_CACHE = new Map<string, { re: RegExp; map: string[] }>();
+const PATTERN_CACHE_MAX = 64;
+
+function cachedPattern(lang: string): { re: RegExp; map: string[] } {
+  const key = lang.toLowerCase();
+  let p = PATTERN_CACHE.get(key);
+  if (!p) {
+    p = buildPattern(languageConfig(key));
+    if (PATTERN_CACHE.size >= PATTERN_CACHE_MAX) {
+      const oldest = PATTERN_CACHE.keys().next().value;
+      if (oldest !== undefined) PATTERN_CACHE.delete(oldest);
+    }
+    PATTERN_CACHE.set(key, p);
+  }
+  return p;
+}
 
 export function highlight(code: string, lang: string): HighlightToken[] {
-  const config = languageConfig(lang);
-  let key = lang.toLowerCase();
-  if (!PATTERN_CACHE.has(key)) PATTERN_CACHE.set(key, buildPattern(config));
-  const { re, map } = PATTERN_CACHE.get(key)!;
   // markdown gets a special lightweight pass
   if (lang.toLowerCase() === "markdown") return highlightMarkdown(code);
 
+  const { re, map } = cachedPattern(lang);
   const tokens: HighlightToken[] = [];
   let pos = 0;
-  re.lastIndex = 0;
-  const m = re.exec(code);
-  void m;
   while (pos < code.length) {
     re.lastIndex = pos;
     const match = re.exec(code);
@@ -146,50 +160,38 @@ export function highlight(code: string, lang: string): HighlightToken[] {
     if (match.index > pos) {
       tokens.push({ type: "plain", text: code.slice(pos, match.index) });
     }
-    const gi = match.findIndex((v, i) => i > 0 && v !== undefined);
-    tokens.push({ type: map[gi - 1] ?? "plain", text: match[0] });
+    // First defined capturing group that participated selects the token kind.
+    let gi = -1;
+    for (let i = 1; i < match.length; i++) {
+      if (match[i] !== undefined) { gi = i; break; }
+    }
+    tokens.push({ type: gi > 0 ? map[gi - 1] : "plain", text: match[0] });
     pos = match.index + match[0].length;
   }
   return tokens;
 }
 
-/** markdown: headings, code fences, bold/italic, links, lists */
+/** markdown: headings, code fences, bold/italic, lists — plain text pass. */
 function highlightMarkdown(code: string): HighlightToken[] {
   const parts: HighlightToken[] = [];
   const lines = code.split(/\n/);
   for (const line of lines) {
     const fence = /^(`{3,}|~{3,})/.exec(line);
-    if (fence) { parts.push({ type: "punct", text: line + "\n" }); continue; }
+    if (fence) { parts.push({ type: "punct", text: line }); continue; }
     const heading = /^(#{1,6})\s+(.*)$/.exec(line);
     if (heading) {
       parts.push({ type: "keyword", text: heading[1] + " " });
-      parts.push({ type: "title", text: heading[2] + "\n" });
+      parts.push({ type: "title", text: heading[2] });
       continue;
     }
     const list = /^(\s*[-*+]\s|\s*\d+\.\s)/.exec(line);
-    if (list) { parts.push({ type: "punct", text: list[1] }); parts.push({ type: "plain", text: line.slice(list[1].length) + "\n" }); continue; }
-    const link = /\[([^\]]*)\]\(([^)]*)\)/y;
-    link.lastIndex = 0;
-    let out = "";
-    let pos = 0;
-    let lm: RegExpExecArray | null;
-    link.lastIndex = pos;
-    while ((lm = link.exec(line.slice(pos)))) {
-      const fullIdx = pos + lm.index;
-      // rebuild manual scan below is overkill; simple fallback: bold/italic inline
-      void fullIdx;
-      out += line.slice(pos, pos + lm.index);
-      out += lm[0];
-      pos += lm.index + lm[0].length;
-      link.lastIndex = 0;
+    if (list) {
+      parts.push({ type: "punct", text: list[1] });
+      parts.push({ type: "plain", text: line.slice(list[1].length) });
+      continue;
     }
-    void out;
-    // simpler inline pass: bold **x**, italic *x*, code `x`
-    const inline = line.replace(/(\*\*|__)(.*?)\1/g, "**$2**");
-    const inline2 = inline.replace(/(`)([^`]*)\1/g, "$1$2$1");
-    void inline2;
     const bold = /\*\*(.+?)\*\*|__(.+?)__/g;
-    let bm;
+    let bm: RegExpExecArray | null;
     let bpos = 0;
     while ((bm = bold.exec(line))) {
       if (bm.index > bpos) parts.push({ type: "plain", text: line.slice(bpos, bm.index) });
@@ -199,5 +201,5 @@ function highlightMarkdown(code: string): HighlightToken[] {
     if (bpos < line.length) parts.push({ type: "plain", text: line.slice(bpos) });
     parts.push({ type: "plain", text: "\n" });
   }
-  return parts.filter((t) => t.text.length);
+  return parts.filter((t) => t.text.length > 0);
 }

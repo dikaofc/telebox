@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import db from "@/lib/db";
-import { deleteMessage } from "@/lib/telegram";
+import { deleteStoredBlobs } from "@/lib/file-storage";
 import { isExpired, buildRawResponse, type RawRow } from "@/lib/raw-serve";
 
 export const runtime = "nodejs";
@@ -24,22 +24,22 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
   }
 
   const row = await db.get<RawRow & { user_id: number }>(
-    "SELECT name, mime, size, tg_file_id, expires_at, user_id FROM files WHERE id = ? AND deleted_at IS NULL",
+    "SELECT id, name, mime, size, tg_file_id, storage_kind, expires_at, user_id FROM files WHERE id = ? AND deleted_at IS NULL",
     share.file_id
   );
   if (!row) return new Response("not found", { status: 404 });
   if (isExpired(row)) {
     // Mirror the raw route: purge from Telegram, drop the row and its shares.
-    const tg = await db.get<{ tg_chat_id: string; tg_message_id: number }>(
-      "SELECT tg_chat_id, tg_message_id FROM files WHERE id = ?",
+    const tg = await db.get<{ tg_chat_id: string; tg_message_id: number; storage_kind: string }>(
+      "SELECT tg_chat_id, tg_message_id, storage_kind FROM files WHERE id = ?",
       share.file_id
     );
     await db.run("UPDATE files SET deleted_at = ? WHERE id = ?", Date.now(), share.file_id);
     await db.run("DELETE FROM shares WHERE file_id = ?", share.file_id);
-    if (tg) void deleteMessage(tg.tg_chat_id, tg.tg_message_id);
+    if (tg) void deleteStoredBlobs(share.file_id, { chatId: tg.tg_chat_id, messageId: tg.tg_message_id }, tg.storage_kind);
     return new Response("file expired", { status: 410 });
   }
 
   const dl = req.nextUrl.searchParams.get("dl") === "1";
-  return buildRawResponse(row, null, dl);
+  return buildRawResponse(row, null, dl, req.headers.get("range"));
 }

@@ -77,13 +77,12 @@ export function matchesMagic(mime: string, head: Uint8Array): boolean {
   );
 }
 
-export function validateFile(
+export function validateFileMeta(
   filename: string,
   mime: string,
-  size: number,
-  head?: Uint8Array
+  size: number
 ): { valid: boolean; error?: string } {
-  if (size === 0) return { valid: false, error: "empty file" };
+  if (!Number.isSafeInteger(size) || size <= 0) return { valid: false, error: "invalid file size" };
 
   const ext = "." + filename.split(".").pop()?.toLowerCase();
   const expectedMime = EXTENSION_MAP[ext];
@@ -95,6 +94,19 @@ export function validateFile(
   if (expectedMime && expectedMime !== mime) {
     return { valid: false, error: `extension ${ext} does not match mime ${mime}` };
   }
+
+  return { valid: true };
+}
+
+export function validateFile(
+  filename: string,
+  mime: string,
+  size: number,
+  head?: Uint8Array
+): { valid: boolean; error?: string } {
+  if (size === 0) return { valid: false, error: "empty file" };
+  const meta = validateFileMeta(filename, mime, size);
+  if (!meta.valid) return meta;
 
   if (head && !matchesMagic(mime, head)) {
     return { valid: false, error: `content does not match mime ${mime}` };

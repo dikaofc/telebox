@@ -7,6 +7,8 @@ import { IconUpload, IconFile, IconDownload, IconClock, IconEye, IconCopy } from
 type Result = { id: string; url: string; name: string; size?: number; mime?: string; dedup?: boolean };
 type UploadResult = Result | { files: Result[] };
 type Auth = { logged_in: boolean; email?: string };
+const MAX_BROWSER_UPLOAD_BYTES = 50 * 1024 * 1024;
+const MAX_DIRECT_UPLOAD_BYTES = 3 * 1024 * 1024;
 
 export default function Home() {
   const [auth, setAuth] = useState<Auth | null>(null);
@@ -18,6 +20,7 @@ export default function Home() {
   const [password, setPassword] = useState("");
   const [dragOver, setDragOver] = useState(false);
   const [ttl, setTtl] = useState("");
+  const [progress, setProgress] = useState<{ name: string; done: number; total: number } | null>(null);
 
   const TTL_OPTIONS: [string, string][] = [
     ["", "keep forever"],
@@ -34,29 +37,110 @@ export default function Home() {
   async function uploadFiles(files: FileList | File[]) {
     const arr = Array.from(files);
     if (arr.length === 0) return;
+    const oversized = arr.find((file) => file.size > MAX_BROWSER_UPLOAD_BYTES);
+    if (oversized) {
+      setError(`${oversized.name} is larger than 50 MB, the maximum supported file size.`);
+      return;
+    }
     setBusy(true);
     setError(null);
     setResults([]);
+    setProgress(null);
     try {
-      const fd = new FormData();
-      arr.forEach((f) => fd.append("file", f));
-      if (ttl) fd.append("ttl", ttl);
-      const res = await fetch("/api/upload", { method: "POST", body: fd });
-      const text = await res.text();
-      let json: UploadResult;
-      try {
-        json = JSON.parse(text) as UploadResult;
-      } catch {
-        throw new Error(`upload failed (HTTP ${res.status}): ${text.slice(0, 200)}`);
+      const uploaded: Result[] = [];
+      for (const file of arr) {
+        const result = file.size <= MAX_DIRECT_UPLOAD_BYTES
+          ? await uploadDirect(file)
+          : [await uploadInChunks(file)];
+        uploaded.push(...result);
+        setResults([...uploaded]);
       }
-      if (!res.ok) throw new Error((json as { error?: string }).error ?? res.statusText);
-      if ("files" in json) setResults(json.files);
-      else setResults([json]);
     } catch (e) {
       setError(e instanceof Error ? e.message : "upload failed");
     } finally {
       setBusy(false);
+      setProgress(null);
     }
+  }
+
+  async function uploadDirect(file: File): Promise<Result[]> {
+    const fd = new FormData();
+    fd.append("file", file);
+    if (ttl) fd.append("ttl", ttl);
+    const res = await fetch("/api/upload", { method: "POST", body: fd });
+    const text = await res.text();
+    let json: UploadResult;
+    try {
+      json = JSON.parse(text) as UploadResult;
+    } catch {
+      throw new Error(`upload failed (HTTP ${res.status}): ${text.slice(0, 200)}`);
+    }
+    if (!res.ok) throw new Error((json as { error?: string }).error ?? res.statusText);
+    return "files" in json ? json.files : [json];
+  }
+
+  async function uploadInChunks(file: File): Promise<Result> {
+    const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer());
+    const sha256 = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+    const init = await fetch("/api/upload", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "init", name: file.name, mime: file.type || "application/octet-stream", size: file.size, sha256, ttl }),
+    });
+    const initText = await init.text();
+    const initJson = JSON.parse(initText) as { uploadId?: string; chunkSize?: number; error?: string };
+    if (!init.ok || !initJson.uploadId || !initJson.chunkSize) throw new Error(initJson.error ?? `upload init failed (HTTP ${init.status})`);
+
+    const totalParts = Math.ceil(file.size / initJson.chunkSize);
+    for (let partIndex = 0; partIndex < totalParts; partIndex++) {
+      const start = partIndex * initJson.chunkSize;
+      const chunk = file.slice(start, Math.min(file.size, start + initJson.chunkSize));
+      // Retry each part: mobile/flaky links drop single requests, and the
+      // server accepts re-sent parts idempotently, so resume don't restart.
+      let sent = false;
+      let lastError: string | null = null;
+      for (let attempt = 1; attempt <= 3 && !sent; attempt++) {
+        try {
+          const form = new FormData();
+          form.append("uploadId", initJson.uploadId);
+          form.append("partIndex", String(partIndex));
+          form.append("chunk", chunk, `${file.name}.part`);
+          const res = await fetch("/api/upload", { method: "POST", body: form });
+          const json = await res.json().catch(() => ({})) as { error?: string };
+          if (!res.ok) throw new Error(json.error ?? `upload part failed (HTTP ${res.status})`);
+          sent = true;
+        } catch (e) {
+          lastError = e instanceof Error ? e.message : "upload part failed";
+          if (attempt < 3) await new Promise((r) => setTimeout(r, 500 * attempt));
+        }
+      }
+      if (!sent) throw new Error(`${file.name} part ${partIndex + 1}/${totalParts}: ${lastError}`);
+      setProgress({ name: file.name, done: partIndex + 1, total: totalParts });
+    }
+
+    // Complete can fail transiently (hash verification re-downloads every
+    // part through Telegram). Retry before giving up — the operation is
+    // idempotent server-side, so a retry never duplicates the file.
+    let result: Result & { error?: string } | null = null;
+    let lastCompleteError: string | null = null;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      const complete = await fetch("/api/upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "complete", uploadId: initJson.uploadId }),
+      });
+      const json = (await complete.json().catch(() => ({}))) as Result & { error?: string };
+      if (complete.ok) { result = json; break; }
+      // 4xx (other than 502/503) are deterministic — retrying won't help.
+      if (complete.status !== 502 && complete.status !== 503) {
+        lastCompleteError = json.error ?? `upload completion failed (HTTP ${complete.status})`;
+        break;
+      }
+      lastCompleteError = json.error ?? `upload completion failed (HTTP ${complete.status})`;
+      await new Promise((r) => setTimeout(r, 1000 * attempt));
+    }
+    if (!result) throw new Error(lastCompleteError ?? "upload completion failed");
+    return result;
   }
 
   async function authSubmit(mode: "login" | "signup") {
@@ -155,6 +239,17 @@ export default function Home() {
         </label>
 
         {error && <p className="error-text">{error}</p>}
+
+        {busy && progress && (
+          <div className="card" style={{ background: "var(--surface)", marginTop: 12 }} role="status" aria-live="polite">
+            <div style={{ fontSize: 13, wordBreak: "break-all" }}>
+              uploading {progress.name} — part {progress.done}/{progress.total}
+            </div>
+            <div style={{ height: 6, borderRadius: 3, background: "var(--faint)", marginTop: 8, overflow: "hidden" }}>
+              <div style={{ height: "100%", width: `${Math.round((progress.done / progress.total) * 100)}%`, background: "var(--foreground)" }} />
+            </div>
+          </div>
+        )}
 
         {results.length > 0 && (
           <div style={{ marginTop: 16 }}>

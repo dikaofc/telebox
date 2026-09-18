@@ -1,4 +1,4 @@
-import { createHmac, createHash } from "node:crypto";
+import { createHmac, createHash, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 import { NextRequest } from "next/server";
 import db from "@/lib/db";
@@ -28,19 +28,29 @@ function unsign(signed: string): string | null {
   const payload = signed.slice(0, idx);
   const sig = signed.slice(idx + 1);
   const expected = createHmac("sha256", sessionSecret()).update(payload).digest("hex");
-  if (sig.length !== expected.length) return null;
-  const a = Buffer.from(sig);
-  const b = Buffer.from(expected);
+  const a = Buffer.from(sig, "utf8");
+  const b = Buffer.from(expected, "utf8");
   if (a.length !== b.length) return null;
-  let mismatch = false;
-  for (let i = 0; i < a.length; i++) mismatch = mismatch || a[i] !== b[i];
-  return mismatch ? null : payload;
+  return timingSafeEqual(a, b) ? payload : null;
 }
 
-type SessionPayload = { userId: number; exp: number };
+/** Shared salt for anonymous actor hashes. Same fail-closed secret as sessions. */
+export function actorSalt(): string {
+  return sessionSecret();
+}
 
-export function createSessionToken(userId: number): string {
-  const payload: SessionPayload = { userId, exp: Date.now() + MAX_AGE * 1000 };
+type SessionPayload = { userId: number; pw: string; exp: number };
+
+/**
+ * Session tokens are bound to the account's current password hash: a token is
+ * only honored while `pw` still equals the first 16 hex chars of the account's
+ * stored scrypt hash. Changing the password (or hashing at new parameters on
+ * login) instantly invalidates every other session for that account, so a
+ * stolen cookie can always be killed by rotating the password. The token
+ * carries no secret material — `pw` is a hash prefix, never the hash itself.
+ */
+export function createSessionToken(userId: number, passwordHashPrefix: string): string {
+  const payload: SessionPayload = { userId, pw: passwordHashPrefix, exp: Date.now() + MAX_AGE * 1000 };
   return sign(JSON.stringify(payload));
 }
 
@@ -51,8 +61,19 @@ async function getSessionUserIdFromCookie(): Promise<number | null> {
   const json = unsign(raw);
   if (!json) return null;
   try {
-    const p: SessionPayload = JSON.parse(json);
+    const p: SessionPayload = JSON.parse(json) as SessionPayload;
+    if (typeof p.userId !== "number" || typeof p.pw !== "string" || typeof p.exp !== "number") return null;
     if (Date.now() > p.exp) return null;
+    // Bind check: token must match the account's current password hash prefix.
+    const row = await db.get<{ password_hash: string }>(
+      "SELECT password_hash FROM users WHERE id = ?",
+      p.userId
+    );
+    if (!row) return null;
+    const current = row.password_hash.slice(0, 16);
+    const a = Buffer.from(p.pw, "utf8");
+    const b = Buffer.from(current, "utf8");
+    if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
     return p.userId;
   } catch {
     return null;
@@ -67,6 +88,7 @@ async function getUserIdFromApiKey(req: NextRequest): Promise<number | null> {
   const auth = req.headers.get("authorization");
   if (!auth?.startsWith("Bearer ")) return null;
   const key = auth.slice(7);
+  if (key.length < 16 || key.length > 256) return null;
   const hash = createHash("sha256").update(key).digest("hex");
   const row = await db.get<{ id: number; user_id: number }>("SELECT id, user_id FROM api_keys WHERE key_hash = ?", hash);
   if (!row) return null;
@@ -74,11 +96,35 @@ async function getUserIdFromApiKey(req: NextRequest): Promise<number | null> {
   return row.user_id;
 }
 
-/** Cookie session first, then API key fallback. */
+/** Cookie session first, then API key fallback. Anonymous users resolve to 0. */
 export async function resolveUserId(req: NextRequest): Promise<number> {
   const fromCookie = await getSessionUserIdFromCookie();
   if (fromCookie) return fromCookie;
   return (await getUserIdFromApiKey(req)) ?? 0;
+}
+
+/** Server-component variant: reads cookies + Authorization via headers(). */
+export async function resolveUserIdFromHeaders(): Promise<number> {
+  const { headers } = await import("next/headers");
+  const h = await headers();
+  const fromCookie = await getSessionUserIdFromCookie();
+  if (fromCookie) return fromCookie;
+  const auth = h.get("authorization");
+  if (auth?.startsWith("Bearer ")) {
+    const key = auth.slice(7);
+    if (key.length >= 16 && key.length <= 256) {
+      const hash = createHash("sha256").update(key).digest("hex");
+      const row = await db.get<{ id: number; user_id: number }>(
+        "SELECT id, user_id FROM api_keys WHERE key_hash = ?",
+        hash
+      );
+      if (row) {
+        await db.run("UPDATE api_keys SET last_used_at = ? WHERE id = ?", Date.now(), row.id);
+        return row.user_id;
+      }
+    }
+  }
+  return 0;
 }
 
 export type SessionUser = {
@@ -109,19 +155,41 @@ export async function resolveActor(req: NextRequest): Promise<string> {
   if (fromCookie) return `user:${fromCookie}`;
   const apiKeyUserId = await getUserIdFromApiKey(req);
   if (apiKeyUserId) return `user:${apiKeyUserId}`;
-  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? req.headers.get("x-real-ip") ?? "unknown";
+  const ip = clientIp(req);
   const hash = createHash("sha256").update(`${ip}:${sessionSecret()}`).digest("hex").slice(0, 16);
   return `ip:${hash}`;
 }
 
+/** Server-component actor variant for RSC pages (mirrors resolveActor). */
+export async function resolveActorFromHeaders(): Promise<string> {
+  const userId = await getSessionUserIdFromCookie();
+  if (userId) return `user:${userId}`;
+  const { headers } = await import("next/headers");
+  const h = await headers();
+  const ip = h.get("x-forwarded-for")?.split(",")[0]?.trim() ?? h.get("x-real-ip") ?? "unknown";
+  const hash = createHash("sha256").update(`${ip}:${sessionSecret()}`).digest("hex").slice(0, 16);
+  return `ip:${hash}`;
+}
+
+/**
+ * Best-effort client IP from proxy headers. Only Vercel (which overwrites
+ * x-forwarded-for) is trusted; the `known` flag lets callers decide whether
+ * an IP-derived rate limit or actor key is meaningful.
+ */
+export function clientIp(req: NextRequest): string {
+  return req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? req.headers.get("x-real-ip") ?? "unknown";
+}
+
 export function setSessionCookie(token: string) {
+  const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
   return {
-    "Set-Cookie": `${COOKIE_NAME}=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${MAX_AGE}`,
+    "Set-Cookie": `${COOKIE_NAME}=${token}; Path=/; HttpOnly${secure}; SameSite=Lax; Max-Age=${MAX_AGE}`,
   };
 }
 
 export function clearSessionCookie() {
+  const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
   return {
-    "Set-Cookie": `${COOKIE_NAME}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`,
+    "Set-Cookie": `${COOKIE_NAME}=; Path=/; HttpOnly${secure}; SameSite=Lax; Max-Age=0`,
   };
 }

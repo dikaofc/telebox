@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { IconBox } from "@/components/icons";
 import { ThemeToggle } from "@/components/theme-toggle";
 
@@ -12,6 +14,7 @@ type Auth = { logged_in: boolean; email?: string };
  */
 export function SiteNav() {
   const [auth, setAuth] = useState<Auth | null>(null);
+  const router = useRouter();
 
   useEffect(() => {
     fetch("/api/auth/whoami")
@@ -22,39 +25,45 @@ export function SiteNav() {
 
   return (
     <nav className="nav" aria-label="Main">
-      <a href="/" className="nav-brand" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      <Link href="/" className="nav-brand" style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <IconBox size={18} />
         telebox
-      </a>
+      </Link>
       <div className="nav-links" style={{ display: "flex", gap: 6 }}>
-        <button type="button" className="btn btn-sm" onClick={() => (window.location.href = "/")}>
+        <button type="button" className="btn btn-sm" onClick={() => router.push("/")}>
           home
         </button>
-        <button type="button" className="btn btn-sm" onClick={() => (window.location.href = "/pastebin")}>
+        <button type="button" className="btn btn-sm" onClick={() => router.push("/pastebin")}>
           pastebin
         </button>
-        <button type="button" className="btn btn-sm" onClick={() => (window.location.href = "/paste/new")}>
+        <button type="button" className="btn btn-sm" onClick={() => router.push("/paste/new")}>
           new paste
         </button>
         <ThemeToggle />
         {auth?.logged_in ? (
           <>
-            <button type="button" className="btn btn-sm" onClick={() => (window.location.href = "/my")}>
+            <button type="button" className="btn btn-sm" onClick={() => router.push("/my")}>
               files
             </button>
-            <button type="button" className="btn btn-sm" onClick={() => (window.location.href = "/profile")}>
+            <button type="button" className="btn btn-sm" onClick={() => router.push("/profile")}>
               profile
             </button>
             <button
               type="button"
               className="btn btn-sm"
-              onClick={() => fetch("/api/auth/logout", { method: "POST" }).then(() => setAuth({ logged_in: false }))}
+              onClick={() =>
+                fetch("/api/auth/logout", { method: "POST" }).then(() => {
+                  setAuth({ logged_in: false });
+                  router.push("/");
+                  router.refresh();
+                })
+              }
             >
               logout
             </button>
           </>
         ) : (
-          <button type="button" className="btn btn-sm" onClick={() => (window.location.href = "/")}>
+          <button type="button" className="btn btn-sm" onClick={() => router.push("/")}>
             login
           </button>
         )}

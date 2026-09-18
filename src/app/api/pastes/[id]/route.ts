@@ -35,8 +35,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     id, actor, id, actor
   );
 
-  const comments = await db.all<{ id: string; author_name: string; body: string; created_at: number }>(
-    "SELECT id, author_name, body, created_at FROM paste_comments WHERE paste_id = ? ORDER BY created_at ASC",
+  const comments = await db.all<{ id: string; user_id: number; author_name: string; body: string; created_at: number; avatar_file_id: string | null }>(
+    `SELECT c.id, c.user_id, c.author_name, c.body, c.created_at, u.avatar_file_id
+     FROM paste_comments c LEFT JOIN users u ON c.user_id = u.id
+    WHERE c.paste_id = ? ORDER BY c.created_at ASC LIMIT 200`,
     id
   );
 
@@ -47,8 +49,12 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     like_count: counts.like_count, star_count: counts.star_count, comment_count: counts.comment_count,
     liked: !!flags?.liked, starred: !!flags?.starred,
     comments: comments.map((c) => ({
-      id: c.id, author: c.author_name || "anonymous", body: c.body,
+      id: c.id,
+      author: c.author_name || "anonymous",
+      avatar_url: c.user_id ? (c.avatar_file_id ? `/avatar/${c.user_id}` : null) : null,
+      body: c.body,
       created_at: new Date(c.created_at).toISOString(),
+      user_id: c.user_id,
     })),
   });
 }

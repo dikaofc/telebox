@@ -1,25 +1,52 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useCallback, useSyncExternalStore } from "react";
 import { IconSun, IconMoon } from "@/components/icons";
 
+/**
+ * Theme is an external store (localStorage + prefers-color-scheme) read
+ * through useSyncExternalStore: the server snapshot is neutral so hydration
+ * never mismatches, and the real value is adopted right after hydration —
+ * no setState-in-effect and no flash-of-wrong-theme error.
+ */
+type Theme = "light" | "dark";
+
+const listeners = new Set<() => void>();
+let cachedTheme: Theme | null = null;
+
+function subscribe(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+
+function getSnapshot(): Theme {
+  if (cachedTheme === null) {
+    const stored = localStorage.getItem("theme") as Theme | null;
+    cachedTheme =
+      stored ?? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+  }
+  return cachedTheme;
+}
+
+function getServerSnapshot(): Theme {
+  return "light";
+}
+
 export function ThemeToggle() {
-  const [theme, setTheme] = useState<"light" | "dark">("light");
+  const theme = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 
+  // Keep the document attribute in sync whenever the store value changes.
   useEffect(() => {
-    const stored = localStorage.getItem("theme") as "light" | "dark" | null;
-    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-    const initial = stored ?? (prefersDark ? "dark" : "light");
-    setTheme(initial);
-    document.documentElement.setAttribute("data-theme", initial);
-  }, []);
+    document.documentElement.setAttribute("data-theme", theme);
+  }, [theme]);
 
-  function toggle() {
-    const next = theme === "light" ? "dark" : "light";
-    setTheme(next);
+  const toggle = useCallback(() => {
+    const next: Theme = getSnapshot() === "light" ? "dark" : "light";
+    cachedTheme = next;
     localStorage.setItem("theme", next);
     document.documentElement.setAttribute("data-theme", next);
-  }
+    for (const listener of listeners) listener();
+  }, []);
 
   return (
     <button
