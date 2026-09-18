@@ -9,6 +9,7 @@ import { clientIp, resolveUserId } from "@/lib/session";
 import { rawUrl } from "@/lib/raw-serve";
 import { purgeExpired } from "@/lib/purge";
 import { cleanupAbandonedUpload } from "@/lib/file-storage";
+import { isFileLike } from "@/lib/upload-file";
 import {
   CHUNK_BYTES,
   MAX_SINGLE_FILE_BYTES,
@@ -96,11 +97,16 @@ async function initUpload(req: NextRequest, userId: number, body: Record<string,
 
 async function uploadChunk(req: NextRequest, userId: number) {
   const form = await req.formData().catch(() => null);
-  if (!form) return invalid("invalid upload chunk");
+  if (!form) return invalid("invalid upload chunk: could not parse form data");
   const uploadId = form.get("uploadId");
-  const partIndex = Number(form.get("partIndex"));
+  const partIndexRaw = form.get("partIndex");
+  const partIndex = Number(partIndexRaw);
   const chunk = form.get("chunk");
-  if (typeof uploadId !== "string" || !Number.isSafeInteger(partIndex) || !(chunk instanceof File)) return invalid("invalid upload chunk");
+  if (typeof uploadId !== "string") return invalid(`invalid upload chunk: uploadId missing (got ${typeof uploadId})`);
+  if (!Number.isSafeInteger(partIndex) || partIndex < 0) {
+    return invalid(`invalid upload chunk: bad partIndex (got ${JSON.stringify(partIndexRaw)})`);
+  }
+  if (!isFileLike(chunk)) return invalid(`invalid upload chunk: chunk field missing or not a file (got ${chunk === null ? "null" : typeof chunk})`);
 
   const session = await db.get<UploadSession>(
     "SELECT id, user_id, name, mime, size, sha256, total_parts, expires_at, created_at FROM upload_sessions WHERE id = ?",
@@ -111,10 +117,19 @@ async function uploadChunk(req: NextRequest, userId: number) {
     await cleanupAbandonedUpload(uploadId);
     return invalid("upload session expired", 410);
   }
-  if (partIndex < 0 || partIndex >= session.total_parts || chunk.size === 0 || chunk.size > CHUNK_BYTES) return invalid("invalid upload chunk");
+  if (partIndex >= session.total_parts) {
+    return invalid(`invalid upload chunk: partIndex ${partIndex} beyond total_parts ${session.total_parts}`);
+  }
+  if (chunk.size === 0) return invalid(`invalid upload chunk: chunk is 0 bytes for part ${partIndex} (client slice bug or empty read)`);
+  if (chunk.size > CHUNK_BYTES) return invalid(`invalid upload chunk: chunk is ${chunk.size} bytes, max ${CHUNK_BYTES}`);
   // Non-final parts must be exactly full: a short middle part would silently
   // shift every later byte. The final part carries the remainder.
-  if (chunk.size !== expectedPartSize(session.size, partIndex)) return invalid("invalid upload chunk");
+  const expected = expectedPartSize(session.size, partIndex);
+  if (chunk.size !== expected) {
+    return invalid(
+      `invalid upload chunk: part ${partIndex}/${session.total_parts - 1} is ${chunk.size} bytes, expected exactly ${expected} (file size ${session.size})`
+    );
+  }
 
   const bytes = new Uint8Array(await chunk.arrayBuffer());
   const hash = createHash("sha256").update(bytes).digest("hex");
