@@ -25,7 +25,7 @@ This document describes telebox's threat model and the concrete controls in the 
 - **Owner gate** — `/raw/:id`, `/i/:id`, `GET /api/files/:id` return 404 for both missing files and wrong-owner requests (no existence oracle). `/s/:token` is a 192-bit capability; missing/revoked/expired tokens all read 404.
 - **Response hardening** — `X-Content-Type-Options: nosniff` on all file responses; `Content-Disposition` derived from `dl=1` and mime; filenames encoded via RFC 5987.
 - **Range requests** — `parseRange` in `raw-serve.ts` implements 206/416 correctly; malformed or unsatisfiable headers never crash the route.
-- **Expiry** — expired files are purged (row + Telegram blob + shares) on access, by hourly cron, and probabilistically on upload.
+- **Expiry** — expired files are purged (row + Telegram blob + shares) on access, by daily cron (Vercel Hobby maximum), and probabilistically on upload.
 
 ## Abuse control
 

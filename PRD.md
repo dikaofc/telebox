@@ -11,7 +11,7 @@ Serverless file hosting + pastebin. Telegram (private channel) as blob storage, 
 - SHA-256 dedup, scoped per owner; server-side hash verification of stored bytes
 - Random non-enumerable IDs (57-char alphabet, rejection sampling)
 - Accounts, sessions (password-hash-bound, revocable), API keys
-- Expiration TTL (1 h–30 d) with hourly cron janitor + self-heal sweeps
+- Expiration TTL (1 h–30 d) with daily cron janitor + self-heal sweeps
 - Pastebin: create, feed, detail, comments (edit/delete own), like, star — per-person reactions
 - Profile: display name, avatar (Telegram-stored), password change (revokes other sessions)
 - Share links `/s/:token`: revocable, expiring capability tokens for private files

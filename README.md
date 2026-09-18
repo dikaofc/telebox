@@ -44,7 +44,7 @@ Open http://localhost:3000
 - Raw file serving at `/raw/:id[/filename]` with long-lived cache headers
 - Accounts, ownership, delete (soft-deletes the row **and** removes the Telegram blob)
 - API keys (`tb_` prefix) for CLI access
-- Expiration TTL (1 hour to 30 days), guaranteed by a janitor (hourly cron + self-heal on access)
+- Expiration TTL (1 hour to 30 days), guaranteed by a janitor (daily cron + self-heal on access)
 - Magic-byte validation (extension spoof protection)
 - Rate limiting on upload, signup, login, pastes, comments, likes/stars, avatar uploads, API-key creation
 - Public pastebin: create pastes, comment, edit/delete own comments, like, star — reactions are per-person (account or IP-derived for anonymous)
@@ -217,6 +217,6 @@ Changing the password signs out every other device: session tokens embed a prefi
 
 Rate limiter uses Upstash Redis when `UPSTASH_REDIS_REST_*` is set; falls back to in-memory locally (single-process only — always set Upstash in production).
 
-The purge janitor runs hourly via Vercel cron (`vercel.json`), plus probabilistically on uploads and lazily on file access, so expiry is enforced even if cron is unreachable.
+The purge janitor runs once daily via Vercel cron (`vercel.json` — once per day is the maximum frequency on Vercel's Hobby plan), plus probabilistically on uploads and lazily on file access, so expiry is enforced even if cron is unreachable.
 
 Postgres path is covered by tests via PGlite (real Postgres in WASM) — run `npm test`. See [SECURITY.md](SECURITY.md) for the full security model and [ARCHITECTURE.md](ARCHITECTURE.md) for internal design.
